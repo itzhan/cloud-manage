@@ -83,11 +83,11 @@ const PLATFORM_COLS: Record<string, { used: string; max: string }> = {
 
 router.post('/pull', (req: Request, res: Response) => {
   const db = getDb();
-  const { count = 1, machineId, platform = 'claude', brand, minBalance } = req.body;
+  const { count = 1, machineId, platform, brand, minBalance } = req.body;
   if (!machineId) { res.status(400).json({ error: 'machineId required' }); return; }
 
-  const cols = PLATFORM_COLS[platform];
-  if (!cols) { res.status(400).json({ error: `invalid platform: ${platform}` }); return; }
+  const cols = platform ? PLATFORM_COLS[platform] : null;
+  if (platform && !cols) { res.status(400).json({ error: `invalid platform: ${platform}` }); return; }
 
   const now = new Date().toISOString();
 
@@ -96,23 +96,24 @@ router.post('/pull', (req: Request, res: Response) => {
       SELECT c.* FROM cards c
       LEFT JOIN payment_accounts pa ON c.accountId = pa.id
       WHERE c.allocatedTo IS NULL AND c.status = 'active' AND c.deleted = 0
-        AND c.${cols.used} < c.${cols.max}
     `;
+    if (cols) query += ` AND c.${cols.used} < c.${cols.max}`;
     const params: any[] = [];
     if (brand) { query += ` AND c.brand = ?`; params.push(brand); }
     if (minBalance != null) { query += ` AND (pa.balance IS NULL OR pa.balance >= ?)`; params.push(minBalance); }
-    query += ` ORDER BY c.${cols.used} ASC LIMIT ?`;
+    query += cols ? ` ORDER BY c.${cols.used} ASC LIMIT ?` : ` ORDER BY c.addedAt DESC LIMIT ?`;
     params.push(count);
 
     const rows = db.prepare(query).all(...params) as any[];
 
     if (rows.length === 0) return { cards: [], paymentAccounts: [] };
 
-    const updateStmt = db.prepare(`
-      UPDATE cards SET allocatedTo = ?, allocatedAt = ?, ${cols.used} = ${cols.used} + 1 WHERE id = ?
-    `);
-    for (const row of rows) {
-      updateStmt.run(machineId, now, row.id);
+    if (cols) {
+      const updateStmt = db.prepare(`UPDATE cards SET allocatedTo = ?, allocatedAt = ?, ${cols.used} = ${cols.used} + 1 WHERE id = ?`);
+      for (const row of rows) updateStmt.run(machineId, now, row.id);
+    } else {
+      const updateStmt = db.prepare(`UPDATE cards SET allocatedTo = ?, allocatedAt = ? WHERE id = ?`);
+      for (const row of rows) updateStmt.run(machineId, now, row.id);
     }
 
     const accountIds = [...new Set(rows.map(r => r.accountId).filter(Boolean))];
@@ -124,7 +125,7 @@ router.post('/pull', (req: Request, res: Response) => {
 
     const updatedCards = rows.map(r => ({
       ...r,
-      [cols.used]: (r[cols.used] ?? 0) + 1,
+      ...(cols ? { [cols.used]: (r[cols.used] ?? 0) + 1 } : {}),
       allocatedTo: machineId,
       allocatedAt: now,
       deleted: !!r.deleted,
