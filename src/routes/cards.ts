@@ -83,7 +83,7 @@ const PLATFORM_COLS: Record<string, { used: string; max: string }> = {
 
 router.post('/pull', (req: Request, res: Response) => {
   const db = getDb();
-  const { count = 1, machineId, platform, brand, minBalance } = req.body;
+  const { count = 1, machineId, platform, brand, minBalance, preview } = req.body;
   if (!machineId) { res.status(400).json({ error: 'machineId required' }); return; }
 
   const cols = platform ? PLATFORM_COLS[platform] : null;
@@ -108,12 +108,14 @@ router.post('/pull', (req: Request, res: Response) => {
 
     if (rows.length === 0) return { cards: [], paymentAccounts: [] };
 
-    if (cols) {
-      const updateStmt = db.prepare(`UPDATE cards SET allocatedTo = ?, allocatedAt = ?, ${cols.used} = ${cols.used} + 1 WHERE id = ?`);
-      for (const row of rows) updateStmt.run(machineId, now, row.id);
-    } else {
-      const updateStmt = db.prepare(`UPDATE cards SET allocatedTo = ?, allocatedAt = ? WHERE id = ?`);
-      for (const row of rows) updateStmt.run(machineId, now, row.id);
+    if (!preview) {
+      if (cols) {
+        const updateStmt = db.prepare(`UPDATE cards SET allocatedTo = ?, allocatedAt = ?, ${cols.used} = ${cols.used} + 1 WHERE id = ?`);
+        for (const row of rows) updateStmt.run(machineId, now, row.id);
+      } else {
+        const updateStmt = db.prepare(`UPDATE cards SET allocatedTo = ?, allocatedAt = ? WHERE id = ?`);
+        for (const row of rows) updateStmt.run(machineId, now, row.id);
+      }
     }
 
     const accountIds = [...new Set(rows.map(r => r.accountId).filter(Boolean))];
@@ -121,6 +123,10 @@ router.post('/pull', (req: Request, res: Response) => {
     if (accountIds.length > 0) {
       const placeholders = accountIds.map(() => '?').join(',');
       accounts = db.prepare(`SELECT * FROM payment_accounts WHERE id IN (${placeholders})`).all(...accountIds) as any[];
+    }
+
+    if (preview) {
+      return { cards: rows.map(r => ({ ...r, deleted: !!r.deleted })), paymentAccounts: accounts };
     }
 
     const updatedCards = rows.map(r => ({

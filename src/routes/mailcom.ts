@@ -53,7 +53,7 @@ router.post('/import', (req: Request, res: Response) => {
 
 router.post('/pull', (req: Request, res: Response) => {
   const db = getDb();
-  const { count = 1, machineId } = req.body;
+  const { count = 1, machineId, preview } = req.body;
   if (!machineId) { res.status(400).json({ error: 'machineId required' }); return; }
 
   const now = new Date().toISOString();
@@ -67,13 +67,18 @@ router.post('/pull', (req: Request, res: Response) => {
 
     if (rows.length === 0) return { accounts: [] };
 
-    const stmt = db.prepare('UPDATE mailcom_accounts SET allocatedTo = ?, allocatedAt = ? WHERE id = ?');
-    for (const row of rows) {
-      stmt.run(machineId, now, row.id);
+    if (!preview) {
+      const stmt = db.prepare('UPDATE mailcom_accounts SET allocatedTo = ?, allocatedAt = ? WHERE id = ?');
+      for (const row of rows) {
+        stmt.run(machineId, now, row.id);
+      }
     }
 
     return {
-      accounts: rows.map(r => ({ ...r, banned: !!r.banned, allocatedTo: machineId, allocatedAt: now })),
+      accounts: rows.map(r => ({
+        ...r, banned: !!r.banned,
+        ...(preview ? {} : { allocatedTo: machineId, allocatedAt: now }),
+      })),
     };
   });
 

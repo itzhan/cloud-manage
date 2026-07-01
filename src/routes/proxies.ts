@@ -55,7 +55,7 @@ router.post('/import', (req: Request, res: Response) => {
 
 router.post('/pull', (req: Request, res: Response) => {
   const db = getDb();
-  const { count = 1, machineId, purpose = 'claude', region, pool } = req.body;
+  const { count = 1, machineId, purpose = 'claude', region, pool, preview } = req.body;
   if (!machineId) { res.status(400).json({ error: 'machineId required' }); return; }
 
   const now = new Date().toISOString();
@@ -83,15 +83,17 @@ router.post('/pull', (req: Request, res: Response) => {
     const rows = db.prepare(query).all(...params) as any[];
     if (rows.length === 0) return { proxies: [] };
 
-    const stmt = db.prepare('UPDATE proxies SET allocatedTo = ?, allocatedAt = ? WHERE id = ?');
-    for (const row of rows) {
-      stmt.run(machineId, now, row.id);
+    if (!preview) {
+      const stmt = db.prepare('UPDATE proxies SET allocatedTo = ?, allocatedAt = ? WHERE id = ?');
+      for (const row of rows) {
+        stmt.run(machineId, now, row.id);
+      }
     }
 
     return {
       proxies: rows.map(r => ({
         ...r, bad: !!r.bad, deleted: !!r.deleted,
-        allocatedTo: machineId, allocatedAt: now,
+        ...(preview ? {} : { allocatedTo: machineId, allocatedAt: now }),
       })),
     };
   });

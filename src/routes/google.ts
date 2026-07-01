@@ -53,7 +53,7 @@ router.post('/import', (req: Request, res: Response) => {
 
 router.post('/pull', (req: Request, res: Response) => {
   const db = getDb();
-  const { count = 1, machineId, require2fa = false } = req.body;
+  const { count = 1, machineId, require2fa = false, preview } = req.body;
   if (!machineId) { res.status(400).json({ error: 'machineId required' }); return; }
 
   const now = new Date().toISOString();
@@ -66,13 +66,18 @@ router.post('/pull', (req: Request, res: Response) => {
     const rows = db.prepare(query).all(count) as any[];
     if (rows.length === 0) return { accounts: [] };
 
-    const stmt = db.prepare('UPDATE google_accounts SET allocatedTo = ?, allocatedAt = ? WHERE id = ?');
-    for (const row of rows) {
-      stmt.run(machineId, now, row.id);
+    if (!preview) {
+      const stmt = db.prepare('UPDATE google_accounts SET allocatedTo = ?, allocatedAt = ? WHERE id = ?');
+      for (const row of rows) {
+        stmt.run(machineId, now, row.id);
+      }
     }
 
     return {
-      accounts: rows.map(r => ({ ...r, used: !!r.used, captcha: !!r.captcha, abnormal: !!r.abnormal, allocatedTo: machineId, allocatedAt: now })),
+      accounts: rows.map(r => ({
+        ...r, used: !!r.used, captcha: !!r.captcha, abnormal: !!r.abnormal,
+        ...(preview ? {} : { allocatedTo: machineId, allocatedAt: now }),
+      })),
     };
   });
 

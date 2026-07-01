@@ -65,7 +65,7 @@ router.post('/import', (req: Request, res: Response) => {
 
 router.post('/pull', (req: Request, res: Response) => {
   const db = getDb();
-  const { count = 1, machineId, minRemainingInvites = 1 } = req.body;
+  const { count = 1, machineId, minRemainingInvites = 1, preview } = req.body;
   if (!machineId) { res.status(400).json({ error: 'machineId required' }); return; }
 
   const now = new Date().toISOString();
@@ -80,17 +80,18 @@ router.post('/pull', (req: Request, res: Response) => {
 
     if (rows.length === 0) return { credentials: [] };
 
-    const stmt = db.prepare('UPDATE codex_credentials SET allocatedTo = ?, allocatedAt = ? WHERE id = ?');
-    for (const row of rows) {
-      stmt.run(machineId, now, row.id);
+    if (!preview) {
+      const stmt = db.prepare('UPDATE codex_credentials SET allocatedTo = ?, allocatedAt = ? WHERE id = ?');
+      for (const row of rows) {
+        stmt.run(machineId, now, row.id);
+      }
     }
 
     return {
       credentials: rows.map(r => ({
         ...r,
         invites: JSON.parse(r.invites || '[]'),
-        allocatedTo: machineId,
-        allocatedAt: now,
+        ...(preview ? {} : { allocatedTo: machineId, allocatedAt: now }),
       })),
     };
   });
