@@ -24,6 +24,16 @@ async function request(path: string, options?: RequestInit) {
   return res.json()
 }
 
+const MACHINE_ID_KEY = 'resource-hub-machine-id'
+
+export function getMachineId(): string {
+  return localStorage.getItem(MACHINE_ID_KEY) || ''
+}
+
+export function setMachineId(id: string) {
+  localStorage.setItem(MACHINE_ID_KEY, id)
+}
+
 export const api = {
   stats: () => request('/api/stats'),
 
@@ -36,4 +46,7 @@ export const api = {
 
   import: (resource: string, body: any) =>
     request(`/api/${resource}/import`, { method: 'POST', body: JSON.stringify(body) }),
+
+  pull: (resource: string, body: any) =>
+    request(`/api/${resource}/pull`, { method: 'POST', body: JSON.stringify(body) }),
 }
