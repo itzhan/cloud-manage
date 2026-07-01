@@ -1,0 +1,12 @@
+services:
+  resource-hub:
+    build: .
+    ports:
+      - "3201:3201"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=3201
+      - API_KEY=your-secret-password-here
+      - DB_PATH=/app/data/resource-hub.sqlite
+    restart: unless-stopped
