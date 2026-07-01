@@ -21,6 +21,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=backend /app/dist ./dist
+COPY src/mailcom-sdk ./dist/src/mailcom-sdk
 COPY --from=frontend /app/web/dist ./web/dist
 VOLUME /app/data
 EXPOSE 3201
