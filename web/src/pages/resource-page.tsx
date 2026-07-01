@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { RefreshCw, Upload, Download, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react'
+import { RefreshCw, Upload, Download, ChevronLeft, ChevronRight, Copy, Check, KeyRound, Mail } from 'lucide-react'
 
 interface ColumnDef {
   key: string
@@ -190,6 +190,48 @@ export default function ResourcePage({ resource, title }: Props) {
   const [pullResult, setPullResult] = useState<any[] | null>(null)
   const [pullError, setPullError] = useState('')
   const [copied, setCopied] = useState(false)
+  // Mailcom inbox
+  const [inboxEmail, setInboxEmail] = useState('')
+  const [inboxMails, setInboxMails] = useState<any[]>([])
+  const [inboxLoading, setInboxLoading] = useState(false)
+  const [mailBody, setMailBody] = useState('')
+  const [mailBodyLoading, setMailBodyLoading] = useState(false)
+  // Mailcom prelogin
+  const [preloginLoading, setPreloginLoading] = useState(false)
+  const [preloginMsg, setPreloginMsg] = useState('')
+
+  const openInbox = async (email: string) => {
+    setInboxEmail(email)
+    setInboxMails([])
+    setMailBody('')
+    setInboxLoading(true)
+    try {
+      const res = await api.inbox(email)
+      setInboxMails(res.mails || [])
+    } catch { /* ignore */ }
+    setInboxLoading(false)
+  }
+
+  const openMailBody = async (mailId: string) => {
+    setMailBodyLoading(true)
+    setMailBody('')
+    try {
+      const res = await api.inbox(inboxEmail, mailId)
+      setMailBody(res.body || '')
+    } catch { /* ignore */ }
+    setMailBodyLoading(false)
+  }
+
+  const doPrelogin = async () => {
+    setPreloginLoading(true)
+    setPreloginMsg('')
+    try {
+      const res = await api.prelogin()
+      setPreloginMsg(`成功 ${res.success}，失败 ${res.failed}`)
+      load()
+    } catch (e: any) { setPreloginMsg(`错误: ${e.message}`) }
+    setPreloginLoading(false)
+  }
 
   const config = CONFIGS[resource]
   const limit = 20
@@ -292,6 +334,12 @@ export default function ResourcePage({ resource, title }: Props) {
             <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
             刷新
           </Button>
+          {resource === 'mailcom' && (
+            <Button variant="outline" size="sm" onClick={doPrelogin} disabled={preloginLoading}>
+              <KeyRound className="h-3.5 w-3.5 mr-1.5" />
+              {preloginLoading ? '缓存中...' : '缓存Token'}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={openPull}>
             <Download className="h-3.5 w-3.5 mr-1.5" />
             拉取
@@ -300,6 +348,7 @@ export default function ResourcePage({ resource, title }: Props) {
             <Upload className="h-3.5 w-3.5 mr-1.5" />
             导入
           </Button>
+          {preloginMsg && <span className="text-xs self-center text-muted-foreground">{preloginMsg}</span>}
         </div>
       </div>
 
@@ -327,13 +376,14 @@ export default function ResourcePage({ resource, title }: Props) {
                     {col.label}
                   </th>
                 ))}
+                {resource === 'mailcom' && <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">操作</th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={config.columns.length} className="text-center py-12 text-muted-foreground">加载中...</td></tr>
+                <tr><td colSpan={config.columns.length + (resource === 'mailcom' ? 1 : 0)} className="text-center py-12 text-muted-foreground">加载中...</td></tr>
               ) : data.length === 0 ? (
-                <tr><td colSpan={config.columns.length} className="text-center py-12 text-muted-foreground">暂无数据</td></tr>
+                <tr><td colSpan={config.columns.length + (resource === 'mailcom' ? 1 : 0)} className="text-center py-12 text-muted-foreground">暂无数据</td></tr>
               ) : (
                 data.map((row, i) => (
                   <tr key={row.id || i} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
@@ -342,6 +392,13 @@ export default function ResourcePage({ resource, title }: Props) {
                         {col.render ? col.render(row[col.key], row) : (row[col.key] ?? '—')}
                       </td>
                     ))}
+                    {resource === 'mailcom' && (
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <button onClick={() => openInbox(row.email)} className="p-1 rounded hover:bg-accent" title="查看收件箱">
+                          <Mail className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -467,6 +524,62 @@ export default function ResourcePage({ resource, title }: Props) {
             <Button variant="outline" onClick={() => setShowImport(false)}>取消</Button>
             <Button onClick={handleImport} disabled={!importText.trim()}>导入</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mailcom Inbox Dialog */}
+      <Dialog open={!!inboxEmail} onOpenChange={v => { if (!v) { setInboxEmail(''); setMailBody(''); } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-mono">{inboxEmail}</DialogTitle>
+            <DialogDescription>收件箱</DialogDescription>
+          </DialogHeader>
+
+          {mailBody ? (
+            <div className="space-y-3">
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => setMailBody('')}>
+                ← 返回列表
+              </Button>
+              {mailBodyLoading ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">加载中...</p>
+              ) : (
+                <iframe
+                  srcDoc={mailBody}
+                  sandbox="allow-same-origin"
+                  className="w-full border rounded-md bg-white"
+                  style={{ height: 400 }}
+                  title="邮件内容"
+                />
+              )}
+            </div>
+          ) : (
+            <div className="max-h-96 overflow-auto">
+              {inboxLoading ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">加载中...</p>
+              ) : inboxMails.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">暂无邮件</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="text-left px-3 py-2 text-muted-foreground font-medium">发件人</th>
+                      <th className="text-left px-3 py-2 text-muted-foreground font-medium">主题</th>
+                      <th className="text-left px-3 py-2 text-muted-foreground font-medium">时间</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inboxMails.map((m: any) => (
+                      <tr key={m.id} className="border-b last:border-0 hover:bg-muted/20 cursor-pointer" onClick={() => { setMailBodyLoading(true); openMailBody(m.id); }}>
+                        <td className="px-3 py-2 max-w-[160px] truncate">{m.from}</td>
+                        <td className="px-3 py-2 max-w-[250px] truncate font-medium">{m.subject || '(无主题)'}</td>
+                        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{m.date ? new Date(m.date).toLocaleString() : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

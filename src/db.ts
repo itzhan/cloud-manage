@@ -17,6 +17,7 @@ export function getDb(): Database.Database {
   db.pragma('foreign_keys = ON');
 
   initTables(db);
+  migrateMailcomTokenColumns(db);
   return db;
 }
 
@@ -143,4 +144,15 @@ function initTables(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_proxies_allocated ON proxies(allocatedTo);
     CREATE INDEX IF NOT EXISTS idx_proxies_region ON proxies(region);
   `);
+}
+
+function migrateMailcomTokenColumns(db: Database.Database) {
+  const cols = ['accessToken TEXT', 'refreshToken TEXT', 'sessionExpiresAt TEXT'];
+  for (const col of cols) {
+    try {
+      db.exec(`ALTER TABLE mailcom_accounts ADD COLUMN ${col}`);
+    } catch {
+      // column already exists
+    }
+  }
 }

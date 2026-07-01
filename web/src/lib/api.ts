@@ -49,4 +49,12 @@ export const api = {
 
   pull: (resource: string, body: any) =>
     request(`/api/${resource}/pull`, { method: 'POST', body: JSON.stringify(body) }),
+
+  prelogin: (emails?: string[]) =>
+    request('/api/mailcom/prelogin', { method: 'POST', body: JSON.stringify(emails ? { emails } : {}) }),
+
+  inbox: (email: string, mailId?: string) => {
+    const qs = mailId ? `?email=${encodeURIComponent(email)}&mailId=${encodeURIComponent(mailId)}` : `?email=${encodeURIComponent(email)}`
+    return request(`/api/mailcom/inbox${qs}`)
+  },
 }

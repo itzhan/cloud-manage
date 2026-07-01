@@ -1,0 +1,66 @@
+import { MailComError } from "./errors.js";
+export function parseSse(text) {
+    const events = [];
+    const chunks = text.replace(/\r\n/g, "\n").split(/\n\n+/);
+    for (const chunk of chunks) {
+        const lines = chunk.split("\n").filter(Boolean);
+        if (lines.length === 0)
+            continue;
+        let id;
+        let event;
+        const dataLines = [];
+        for (const line of lines) {
+            if (line.startsWith(":"))
+                continue;
+            const separator = line.indexOf(":");
+            const field = separator === -1 ? line : line.slice(0, separator);
+            const rawValue = separator === -1 ? "" : line.slice(separator + 1);
+            const value = rawValue.startsWith(" ") ? rawValue.slice(1) : rawValue;
+            if (field === "id")
+                id = value;
+            if (field === "event")
+                event = value;
+            if (field === "data")
+                dataLines.push(value);
+        }
+        if (id || event || dataLines.length > 0) {
+            const parsed = { data: dataLines.join("\n") };
+            if (id !== undefined)
+                parsed.id = id;
+            if (event !== undefined)
+                parsed.event = event;
+            events.push(parsed);
+        }
+    }
+    return events;
+}
+export function parseSseJsonData(text) {
+    return parseSse(text)
+        .filter((event) => event.data.trim().startsWith("{") || event.data.trim().startsWith("["))
+        .map((event) => JSON.parse(event.data));
+}
+export function parseMailSubmissionResult(text) {
+    const events = parseSse(text);
+    const error = events.find((event) => event.event === "error" && event.data);
+    if (error) {
+        throw new MailComError(`mail.com submission failed: ${error.data.trim()}`);
+    }
+    const success = events.find((event) => event.event === "success" && event.data);
+    if (!success) {
+        throw new MailComError("mail.com submission did not return a success event");
+    }
+    const rawLocation = success.data.trim();
+    const encodedMessageId = rawLocation.split("/").filter(Boolean).at(-1) ?? rawLocation;
+    return {
+        rawLocation,
+        messageId: safeDecode(encodedMessageId),
+    };
+}
+function safeDecode(value) {
+    try {
+        return decodeURIComponent(value);
+    }
+    catch {
+        return value;
+    }
+}
