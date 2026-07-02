@@ -191,9 +191,8 @@ const CONFIGS: Record<string, ResourceConfig> = {
     importPlaceholder: '粘贴 openai accounts JSON 数组',
     columns: [
       { key: 'email', label: '邮箱', className: 'font-mono text-xs' },
-      { key: 'planType', label: '套餐', render: (v: any) => v ? <Badge variant="secondary">{v}</Badge> : '—' },
-      { key: 'oaiStatus', label: '状态', render: (v: any) => !v || v === '' ? <Badge variant="success">正常</Badge> : <Badge variant="destructive">{v}</Badge> },
-      { key: 'hasToken', label: 'Token', render: (v: any) => v ? <Badge variant="success">有</Badge> : <span className="text-muted-foreground">—</span> },
+      { key: 'apiKey', label: 'API Key', render: (v: any) => v ? <span className="font-mono text-xs">{String(v).slice(0, 12)}...</span> : '—' },
+      { key: 'status', label: '状态', render: (v: any) => v === 'active' ? <Badge variant="success">active</Badge> : <Badge variant="destructive">{v}</Badge> },
       { key: 'sourceKeyName', label: '来源', render: (v: any) => v ? <Badge variant="outline">{v}</Badge> : '—' },
       { key: 'exported', label: '导出', render: (v: any) => v ? <Badge variant="secondary">已导出</Badge> : <Badge variant="success">未导出</Badge> },
     ],

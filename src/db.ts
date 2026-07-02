@@ -19,6 +19,7 @@ export function getDb(): Database.Database {
   initTables(db);
   migrateMailcomTokenColumns(db);
   migrateRegisteredExported(db);
+  migrateOpenaiKeysSchema(db);
   return db;
 }
 
@@ -181,26 +182,15 @@ function initTables(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_registered_source ON registered_accounts(sourceKeyName);
     CREATE TABLE IF NOT EXISTS openai_keys (
       id              TEXT PRIMARY KEY,
-      email           TEXT NOT NULL,
-      password        TEXT,
-      gptPassword     TEXT,
-      twoFaSecret     TEXT,
-      rt              TEXT,
-      msRefreshToken  TEXT,
-      tokenStatus     TEXT DEFAULT 'pending',
-      tokenError      TEXT,
-      planType        TEXT,
-      paidAt          TEXT,
-      paidCard        TEXT,
-      paidCardBrand   TEXT,
-      oaiStatus       TEXT DEFAULT '',
-      sub2apiImports  TEXT DEFAULT '[]',
-      addedAt         TEXT,
+      email           TEXT,
+      apiKey          TEXT,
+      status          TEXT DEFAULT 'active',
       sourceKeyName   TEXT,
-      uploadedAt      TEXT
+      uploadedAt      TEXT,
+      exported        INTEGER DEFAULT 0,
+      exportedAt      TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_openai_source ON openai_keys(sourceKeyName);
-    CREATE INDEX IF NOT EXISTS idx_openai_status ON openai_keys(oaiStatus);
 
     CREATE TABLE IF NOT EXISTS allocation_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -220,6 +210,21 @@ function migrateMailcomTokenColumns(db: Database.Database) {
   for (const col of cols) {
     try { db.exec(`ALTER TABLE mailcom_accounts ADD COLUMN ${col}`); } catch { /* exists */ }
   }
+}
+
+function migrateOpenaiKeysSchema(db: Database.Database) {
+  // 检查旧表是否有 oaiStatus 列（旧结构），如果有就重建
+  try {
+    const cols = db.prepare("PRAGMA table_info(openai_keys)").all() as any[];
+    if (cols.some((c: any) => c.name === 'oaiStatus')) {
+      db.exec('DROP TABLE openai_keys');
+      db.exec(`CREATE TABLE openai_keys (
+        id TEXT PRIMARY KEY, email TEXT, apiKey TEXT, status TEXT DEFAULT 'active',
+        sourceKeyName TEXT, uploadedAt TEXT, exported INTEGER DEFAULT 0, exportedAt TEXT
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_openai_source ON openai_keys(sourceKeyName)');
+    }
+  } catch { /* ignore */ }
 }
 
 function migrateRegisteredExported(db: Database.Database) {
