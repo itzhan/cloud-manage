@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { getDb } from '../db';
+import { getDb, logAllocation } from '../db';
 
 const router = Router();
 
@@ -140,7 +140,15 @@ router.post('/pull', (req: Request, res: Response) => {
     return { cards: updatedCards, paymentAccounts: accounts };
   });
 
-  res.json(tx());
+  const result = tx();
+  if (!preview && result.cards.length > 0) {
+    logAllocation(db, 'cards', 'pull', req.keyName || '未知', result.cards.length, {
+      brand: brand || '(all)',
+      platform: platform || '(none)',
+      count: result.cards.length,
+    });
+  }
+  res.json(result);
 });
 
 router.post('/release', (req: Request, res: Response) => {

@@ -21,6 +21,19 @@ export function getDb(): Database.Database {
   return db;
 }
 
+export function logAllocation(
+  db: Database.Database,
+  resource: string,
+  action: string,
+  keyName: string,
+  count: number,
+  detail?: Record<string, any>,
+) {
+  db.prepare(
+    `INSERT INTO allocation_log (resource, action, keyName, count, detail, createdAt) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(resource, action, keyName, count, detail ? JSON.stringify(detail) : null, new Date().toISOString());
+}
+
 function initTables(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS payment_accounts (
@@ -143,6 +156,17 @@ function initTables(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_proxies_allocated ON proxies(allocatedTo);
     CREATE INDEX IF NOT EXISTS idx_proxies_region ON proxies(region);
+
+    CREATE TABLE IF NOT EXISTS allocation_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      resource TEXT NOT NULL,
+      action TEXT NOT NULL,
+      keyName TEXT NOT NULL,
+      count INTEGER DEFAULT 0,
+      detail TEXT,
+      createdAt TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_allocation_log_created ON allocation_log(createdAt);
   `);
 }
 

@@ -9,6 +9,7 @@ import mailcomRouter from './routes/mailcom';
 import googleRouter from './routes/google';
 import proxiesRouter from './routes/proxies';
 import statsRouter from './routes/stats';
+import apiKeysRouter, { allocationLogRouter } from './routes/api-keys';
 
 const app = express();
 
@@ -30,6 +31,8 @@ app.use('/api/mailcom', mailcomRouter);
 app.use('/api/google', googleRouter);
 app.use('/api/proxies', proxiesRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/keys', apiKeysRouter);
+app.use('/api/allocation-log', allocationLogRouter);
 
 // SPA fallback
 app.get('*', (_req, res) => {

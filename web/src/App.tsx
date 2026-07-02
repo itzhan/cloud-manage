@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { LayoutDashboard, CreditCard, Mail, Chrome, Globe, Key, Settings, LogIn } from 'lucide-react'
+import { LayoutDashboard, CreditCard, Mail, Chrome, Globe, Key, Settings, LogIn, ClipboardList } from 'lucide-react'
 import { api, getApiKey, setApiKey } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import Overview from '@/pages/overview'
 import ResourcePage from '@/pages/resource-page'
+import AllocationLog from '@/pages/allocation-log'
+import ApiKeysPage from '@/pages/api-keys'
 
 const NAV = [
   { id: 'overview', label: '概览', icon: LayoutDashboard },
@@ -13,6 +15,8 @@ const NAV = [
   { id: 'mailcom', label: 'Mail.com', icon: Mail },
   { id: 'proxies', label: '代理 IP', icon: Globe },
   { id: 'codex', label: 'Codex', icon: Key },
+  { id: 'log', label: '分配记录', icon: ClipboardList },
+  { id: 'keys', label: '密钥管理', icon: Settings },
 ] as const
 
 type PageId = (typeof NAV)[number]['id']
@@ -117,6 +121,8 @@ export default function App() {
           {page === 'mailcom' && <ResourcePage resource="mailcom" title="Mail.com 邮箱" />}
           {page === 'proxies' && <ResourcePage resource="proxies" title="代理 IP" />}
           {page === 'codex' && <ResourcePage resource="codex" title="Codex 凭证" />}
+          {page === 'log' && <AllocationLog />}
+          {page === 'keys' && <ApiKeysPage />}
         </div>
       </main>
     </div>

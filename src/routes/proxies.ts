@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { getDb } from '../db';
+import { getDb, logAllocation } from '../db';
 
 const router = Router();
 
@@ -88,7 +88,15 @@ router.post('/pull', (req: Request, res: Response) => {
     };
   });
 
-  res.json(tx());
+  const result = tx();
+  if (!preview && result.proxies.length > 0) {
+    logAllocation(db, 'proxies', 'pull', req.keyName || '未知', result.proxies.length, {
+      pool: pool || '(all)',
+      region: region || '(all)',
+      count: result.proxies.length,
+    });
+  }
+  res.json(result);
 });
 
 router.post('/release', (req: Request, res: Response) => {

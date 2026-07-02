@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { getDb } from '../db';
+import { getDb, logAllocation } from '../db';
 
 const router = Router();
 
@@ -112,7 +112,14 @@ router.post('/pull', (req: Request, res: Response) => {
     };
   });
 
-  res.json(tx());
+  const result = tx();
+  if (!preview && result.accounts.length > 0) {
+    logAllocation(db, 'mailcom', 'pull', req.keyName || '未知', result.accounts.length, {
+      emails: result.accounts.map((a: any) => a.email),
+      count: result.accounts.length,
+    });
+  }
+  res.json(result);
 });
 
 router.post('/release', (req: Request, res: Response) => {
