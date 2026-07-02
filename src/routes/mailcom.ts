@@ -289,7 +289,9 @@ router.post('/prelogin', async (req: Request, res: Response) => {
     return;
   }
 
-  // SSE 流式推送
+  // 加载代理池
+  const proxies = db.prepare("SELECT host, port, user, pass FROM proxies WHERE bad = 0 AND deleted = 0").all() as any[];
+
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -300,11 +302,42 @@ router.post('/prelogin', async (req: Request, res: Response) => {
 
   // @ts-ignore
   const { MailComClient, MemorySessionStore } = await import('../mailcom-sdk/index.js');
+  const { ProxyAgent, fetch: undiciFetch } = await import('undici');
 
   const total = rows.length;
   let done = 0, success = 0, failed = 0;
 
-  send({ type: 'start', total });
+  // 每个代理最多承担 20 个，随机打散
+  const PER_PROXY = 20;
+  const proxyUsage = new Map<number, number>();
+
+  const getProxyFetch = () => {
+    if (proxies.length === 0) return undefined;
+    // 找使用次数最少的代理
+    let bestIdx = Math.floor(Math.random() * proxies.length);
+    let bestCount = proxyUsage.get(bestIdx) ?? 0;
+    for (let i = 0; i < 5; i++) {
+      const ri = Math.floor(Math.random() * proxies.length);
+      const rc = proxyUsage.get(ri) ?? 0;
+      if (rc < bestCount) { bestIdx = ri; bestCount = rc; }
+    }
+    if (bestCount >= PER_PROXY) {
+      // 所有随机采样的都满了，找一个真正最小的
+      let minIdx = 0, minCount = proxyUsage.get(0) ?? 0;
+      for (let i = 1; i < proxies.length; i++) {
+        const c = proxyUsage.get(i) ?? 0;
+        if (c < minCount) { minIdx = i; minCount = c; }
+      }
+      bestIdx = minIdx;
+    }
+    proxyUsage.set(bestIdx, (proxyUsage.get(bestIdx) ?? 0) + 1);
+    const p = proxies[bestIdx];
+    const proxyUrl = `http://${p.user}:${p.pass}@${p.host}:${p.port}`;
+    const agent = new ProxyAgent(proxyUrl);
+    return (url: any, init: any) => undiciFetch(url, { ...init, dispatcher: agent });
+  };
+
+  send({ type: 'start', total, proxies: proxies.length });
 
   const CONCURRENCY = 15;
   let idx = 0;
@@ -314,7 +347,11 @@ router.post('/prelogin', async (req: Request, res: Response) => {
       const row = rows[idx++];
       try {
         const store = new MemorySessionStore();
-        const client = new MailComClient({ email: row.email, password: row.password, sessionStore: store });
+        const proxyFetch = getProxyFetch();
+        const client = new MailComClient({
+          email: row.email, password: row.password, sessionStore: store,
+          ...(proxyFetch ? { fetch: proxyFetch } : {}),
+        });
         const session = await client.auth.login();
         const now = new Date().toISOString();
         db.prepare(`UPDATE mailcom_accounts SET accessToken = ?, refreshToken = ?, sessionExpiresAt = ?, tokenStatus = 'ok', tokenAt = ?, tokenError = NULL WHERE email = ?`)
