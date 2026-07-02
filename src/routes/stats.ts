@@ -41,7 +41,8 @@ router.get('/', (_req: Request, res: Response) => {
     },
     openai: {
       total: count('openai_keys'),
-      active: count('openai_keys', "oaiStatus = '' OR oaiStatus IS NULL"),
+      active: count('openai_keys', "status = 'active'"),
+      unexported: count('openai_keys', "exported = 0 OR exported IS NULL"),
     },
   });
 });
