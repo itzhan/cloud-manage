@@ -173,15 +173,15 @@ const CONFIGS: Record<string, ResourceConfig> = {
         const colors: Record<string, string> = { authorized: 'success', banned: 'destructive', registered: 'secondary' }
         return <Badge variant={(colors[v] || 'secondary') as any}>{v}</Badge>
       }},
-      { key: 'plan_type', label: '套餐' },
+      { key: 'sourceKeyName', label: '来源', render: (v: any) => v ? <Badge variant="outline">{v}</Badge> : '—' },
       { key: 'platform', label: '平台' },
       { key: 'session_key', label: 'SK', render: (v: any) => v ? <span className="font-mono text-xs">{String(v).slice(0, 8)}...</span> : '—' },
-      { key: 'sourceKeyName', label: '来源', render: (v: any) => v ? <Badge variant="outline">{v}</Badge> : '—' },
+      { key: 'exported', label: '导出', render: (v: any) => v ? <Badge variant="secondary">已导出</Badge> : <Badge variant="success">未导出</Badge> },
     ],
     statCards: s => [
       { label: '总数', value: s?.total ?? 0 },
-      { label: '已授权', value: s?.byStatus?.authorized ?? 0 },
-      { label: '已封', value: s?.byStatus?.banned ?? 0 },
+      { label: '未导出', value: s?.unexported ?? 0 },
+      { label: '已导出', value: s?.exported ?? 0 },
     ],
     pullFields: [],
     pullResultKey: 'accounts',

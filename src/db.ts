@@ -18,6 +18,7 @@ export function getDb(): Database.Database {
 
   initTables(db);
   migrateMailcomTokenColumns(db);
+  migrateRegisteredExported(db);
   return db;
 }
 
@@ -172,10 +173,13 @@ function initTables(db: Database.Database) {
       google_email    TEXT,
       browser_id      TEXT,
       sourceKeyName   TEXT,
-      uploadedAt      TEXT
+      uploadedAt      TEXT,
+      exported        INTEGER DEFAULT 0,
+      exportedAt      TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_registered_status ON registered_accounts(status);
     CREATE INDEX IF NOT EXISTS idx_registered_source ON registered_accounts(sourceKeyName);
+    CREATE INDEX IF NOT EXISTS idx_registered_exported ON registered_accounts(exported);
 
     CREATE TABLE IF NOT EXISTS openai_keys (
       id              TEXT PRIMARY KEY,
@@ -216,10 +220,12 @@ function initTables(db: Database.Database) {
 function migrateMailcomTokenColumns(db: Database.Database) {
   const cols = ['accessToken TEXT', 'refreshToken TEXT', 'sessionExpiresAt TEXT'];
   for (const col of cols) {
-    try {
-      db.exec(`ALTER TABLE mailcom_accounts ADD COLUMN ${col}`);
-    } catch {
-      // column already exists
-    }
+    try { db.exec(`ALTER TABLE mailcom_accounts ADD COLUMN ${col}`); } catch { /* exists */ }
+  }
+}
+
+function migrateRegisteredExported(db: Database.Database) {
+  for (const col of ['exported INTEGER DEFAULT 0', 'exportedAt TEXT']) {
+    try { db.exec(`ALTER TABLE registered_accounts ADD COLUMN ${col}`); } catch { /* exists */ }
   }
 }
