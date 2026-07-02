@@ -179,8 +179,6 @@ function initTables(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_registered_status ON registered_accounts(status);
     CREATE INDEX IF NOT EXISTS idx_registered_source ON registered_accounts(sourceKeyName);
-    CREATE INDEX IF NOT EXISTS idx_registered_exported ON registered_accounts(exported);
-
     CREATE TABLE IF NOT EXISTS openai_keys (
       id              TEXT PRIMARY KEY,
       email           TEXT NOT NULL,
@@ -228,4 +226,5 @@ function migrateRegisteredExported(db: Database.Database) {
   for (const col of ['exported INTEGER DEFAULT 0', 'exportedAt TEXT']) {
     try { db.exec(`ALTER TABLE registered_accounts ADD COLUMN ${col}`); } catch { /* exists */ }
   }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_registered_exported ON registered_accounts(exported)'); } catch { /* ignore */ }
 }
