@@ -503,12 +503,22 @@ export default function ResourcePage({ resource, title }: Props) {
             拉取
           </Button>
           {EXPORTABLE.has(resource) && (
-            <a href={`/api/${resource}/export`} target="_blank" rel="noopener noreferrer"
-              onClick={e => { e.preventDefault(); window.open(`/api/${resource}/export?_key=${encodeURIComponent((window as any).__apiKey || localStorage.getItem('resource-hub-api-key') || '')}`, '_blank') }}>
-              <Button variant="outline" size="sm" type="button">
-                <FileDown className="h-3.5 w-3.5 mr-1.5" />导出
-              </Button>
-            </a>
+            <Button variant="outline" size="sm" onClick={async () => {
+              try {
+                const resp = await fetch(`/api/${resource}/export`, { headers: { 'X-API-Key': getApiKey() } })
+                if (!resp.ok) throw new Error('导出失败')
+                const blob = await resp.blob()
+                const disposition = resp.headers.get('content-disposition') || ''
+                const match = disposition.match(/filename="?(.+?)"?$/)
+                const filename = match ? match[1] : `${resource}_export.xlsx`
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a'); a.href = url; a.download = filename; a.click()
+                URL.revokeObjectURL(url)
+                load()
+              } catch { /* ignore */ }
+            }}>
+              <FileDown className="h-3.5 w-3.5 mr-1.5" />导出
+            </Button>
           )}
           <Button size="sm" onClick={() => { setShowImport(true); setImportResult(''); setImportMode('text') }}>
             <Upload className="h-3.5 w-3.5 mr-1.5" />
