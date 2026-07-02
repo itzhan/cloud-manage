@@ -12,7 +12,7 @@ router.get('/', (_req: Request, res: Response) => {
   res.json({
     cards: {
       total: count('cards', 'deleted = 0'),
-      active: count('cards', "deleted = 0 AND status = 'active'"),
+      active: count('cards', "deleted = 0 AND status = 'active' AND allocatedTo IS NULL"),
       allocated: count('cards', 'deleted = 0 AND allocatedTo IS NOT NULL'),
     },
     google: {
