@@ -120,7 +120,9 @@ router.get('/export', (req: Request, res: Response) => {
   conditions.push("session_key IS NOT NULL AND session_key != ''");
   const where = conditions.join(' AND ');
 
-  const rows = db.prepare(`SELECT email, session_key FROM registered_accounts WHERE ${where} ORDER BY uploadedAt DESC`).all(...params) as any[];
+  const exportLimit = parseInt(req.query.limit as string) || 0;
+  const query = `SELECT email, session_key FROM registered_accounts WHERE ${where} ORDER BY uploadedAt DESC` + (exportLimit > 0 ? ` LIMIT ${exportLimit}` : '');
+  const rows = db.prepare(query).all(...params) as any[];
   const text = rows.map((r: any) => r.session_key).join('\n');
 
   // 标记为已导出

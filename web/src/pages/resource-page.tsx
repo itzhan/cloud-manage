@@ -223,6 +223,7 @@ export default function ResourcePage({ resource, title }: Props) {
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [exportedFilter, setExportedFilter] = useState<'' | '0' | '1'>('')
+  const [exportCount, setExportCount] = useState(30)
   // Import
   const [showImport, setShowImport] = useState(false)
   const [importText, setImportText] = useState('')
@@ -513,24 +514,29 @@ export default function ResourcePage({ resource, title }: Props) {
             <Download className="h-3.5 w-3.5 mr-1.5" />
             拉取
           </Button>
-          {EXPORTABLE.has(resource) && (
+          {EXPORTABLE.has(resource) && (<>
+            {(resource === 'registered' || resource === 'openai') && (
+              <input type="number" min={1} value={exportCount} onChange={e => setExportCount(Math.max(1, Number(e.target.value) || 1))}
+                className="h-8 w-16 rounded-md border border-input bg-background px-2 text-xs" title="导出数量" />
+            )}
             <Button variant="outline" size="sm" onClick={async () => {
               try {
-                const resp = await fetch(`/api/${resource}/export`, { headers: { 'X-API-Key': getApiKey() } })
+                const qs = (resource === 'registered' || resource === 'openai') ? `?limit=${exportCount}` : ''
+                const resp = await fetch(`/api/${resource}/export${qs}`, { headers: { 'X-API-Key': getApiKey() } })
                 if (!resp.ok) throw new Error('导出失败')
                 const blob = await resp.blob()
                 const disposition = resp.headers.get('content-disposition') || ''
                 const match = disposition.match(/filename="?(.+?)"?$/)
-                const filename = match ? match[1] : `${resource}_export.xlsx`
+                const filename = match ? match[1] : `${resource}_export.txt`
                 const url = URL.createObjectURL(blob)
                 const a = document.createElement('a'); a.href = url; a.download = filename; a.click()
                 URL.revokeObjectURL(url)
                 load()
               } catch { /* ignore */ }
             }}>
-              <FileDown className="h-3.5 w-3.5 mr-1.5" />导出
+              <FileDown className="h-3.5 w-3.5 mr-1.5" />导出{(resource === 'registered' || resource === 'openai') ? ` (${exportCount})` : ''}
             </Button>
-          )}
+          </>)}
           <Button size="sm" onClick={() => { setShowImport(true); setImportResult(''); setImportMode('text') }}>
             <Upload className="h-3.5 w-3.5 mr-1.5" />
             导入
