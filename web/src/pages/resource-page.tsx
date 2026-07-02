@@ -224,10 +224,33 @@ export default function ResourcePage({ resource, title }: Props) {
 
   const doPrelogin = async () => {
     setPreloginLoading(true)
-    setPreloginMsg('')
+    setPreloginMsg('准备中...')
     try {
-      const res = await api.prelogin()
-      setPreloginMsg(`成功 ${res.success}，失败 ${res.failed}`)
+      const res = await fetch('/api/mailcom/prelogin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': (await import('@/lib/api')).getApiKey() },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok || !res.body) throw new Error('请求失败')
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop() || ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const ev = JSON.parse(line.slice(6))
+            if (ev.type === 'start') setPreloginMsg(`0/${ev.total}`)
+            else if (ev.type === 'progress') setPreloginMsg(`${ev.done}/${ev.total}  ✓${ev.success}  ✗${ev.failed}  ${ev.email}`)
+            else if (ev.type === 'done') setPreloginMsg(`完成：成功 ${ev.success}，失败 ${ev.failed}，共 ${ev.total}`)
+          } catch { /* skip */ }
+        }
+      }
       load()
     } catch (e: any) { setPreloginMsg(`错误: ${e.message}`) }
     setPreloginLoading(false)

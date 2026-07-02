@@ -56,9 +56,28 @@ router.post('/import', (req: Request, res: Response) => {
   const result = tx();
   res.json({ imported: result.count });
 
-  // Async prelogin for newly imported accounts without tokens
+  // 异步 prelogin（不阻塞响应）
   if (result.importedEmails.length > 0) {
-    preloginAccounts(result.importedEmails).catch(() => {});
+    (async () => {
+      try {
+        // @ts-ignore
+        const { MailComClient, MemorySessionStore } = await import('../mailcom-sdk/index.js');
+        const dbInner = getDb();
+        const accts = dbInner.prepare(`SELECT email, password FROM mailcom_accounts WHERE email IN (${result.importedEmails.map(() => '?').join(',')})`)
+          .all(...result.importedEmails) as any[];
+        for (const row of accts) {
+          try {
+            const store = new MemorySessionStore();
+            const client = new MailComClient({ email: row.email, password: row.password, sessionStore: store });
+            const session = await client.auth.login();
+            dbInner.prepare(`UPDATE mailcom_accounts SET accessToken = ?, refreshToken = ?, sessionExpiresAt = ?, tokenStatus = 'ok', tokenAt = ? WHERE email = ?`)
+              .run(session.accessToken, session.refreshToken, session.expiresAt ? new Date(session.expiresAt).toISOString() : null, new Date().toISOString(), row.email);
+          } catch (e: any) {
+            dbInner.prepare(`UPDATE mailcom_accounts SET tokenStatus = 'failed', tokenError = ? WHERE email = ?`).run(e.message || String(e), row.email);
+          }
+        }
+      } catch { /* ignore */ }
+    })();
   }
 });
 
@@ -157,10 +176,9 @@ router.get('/stats', (_req: Request, res: Response) => {
 
 // --- Token caching & inbox helpers ---
 
-async function preloginAccounts(emails?: string[]) {
+router.post('/prelogin', async (req: Request, res: Response) => {
   const db = getDb();
-  // @ts-ignore - dynamic ESM import
-  const { MailComClient, MemorySessionStore } = await import('../mailcom-sdk/index.js');
+  const { emails } = req.body as { emails?: string[] };
 
   let rows: any[];
   if (emails && emails.length > 0) {
@@ -170,50 +188,57 @@ async function preloginAccounts(emails?: string[]) {
     rows = db.prepare(`SELECT email, password FROM mailcom_accounts WHERE tokenStatus != 'ok' OR accessToken IS NULL`).all() as any[];
   }
 
-  const results: { email: string; status: string; error?: string }[] = [];
-  let success = 0;
-  let failed = 0;
+  if (rows.length === 0) {
+    res.json({ total: 0, success: 0, failed: 0 });
+    return;
+  }
 
-  // Concurrency limiter: process N at a time
-  const concurrency = 5;
-  for (let i = 0; i < rows.length; i += concurrency) {
-    const batch = rows.slice(i, i + concurrency);
-    const batchResults = await Promise.allSettled(batch.map(async (row: any) => {
+  // SSE 流式推送
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+
+  const send = (data: any) => { res.write(`data: ${JSON.stringify(data)}\n\n`); };
+
+  // @ts-ignore
+  const { MailComClient, MemorySessionStore } = await import('../mailcom-sdk/index.js');
+
+  const total = rows.length;
+  let done = 0, success = 0, failed = 0;
+
+  send({ type: 'start', total });
+
+  const CONCURRENCY = 15;
+  let idx = 0;
+
+  const runOne = async (): Promise<void> => {
+    while (idx < rows.length) {
+      const row = rows[idx++];
       try {
         const store = new MemorySessionStore();
         const client = new MailComClient({ email: row.email, password: row.password, sessionStore: store });
         const session = await client.auth.login();
         const now = new Date().toISOString();
-        db.prepare(`UPDATE mailcom_accounts SET accessToken = ?, refreshToken = ?, sessionExpiresAt = ?, tokenStatus = 'ok', tokenAt = ? WHERE email = ?`)
+        db.prepare(`UPDATE mailcom_accounts SET accessToken = ?, refreshToken = ?, sessionExpiresAt = ?, tokenStatus = 'ok', tokenAt = ?, tokenError = NULL WHERE email = ?`)
           .run(session.accessToken, session.refreshToken, session.expiresAt ? new Date(session.expiresAt).toISOString() : null, now, row.email);
-        return { email: row.email, status: 'ok' };
+        success++;
+        send({ type: 'progress', email: row.email, status: 'ok', done: ++done, total, success, failed });
       } catch (err: any) {
-        db.prepare(`UPDATE mailcom_accounts SET tokenStatus = 'failed', tokenError = ? WHERE email = ?`)
-          .run(err.message || String(err), row.email);
-        return { email: row.email, status: 'failed', error: err.message || String(err) };
-      }
-    }));
-
-    for (const r of batchResults) {
-      if (r.status === 'fulfilled') {
-        results.push(r.value);
-        if (r.value.status === 'ok') success++;
-        else failed++;
+        const msg = err.message || String(err);
+        db.prepare(`UPDATE mailcom_accounts SET tokenStatus = 'failed', tokenError = ? WHERE email = ?`).run(msg, row.email);
+        failed++;
+        send({ type: 'progress', email: row.email, status: 'failed', error: msg, done: ++done, total, success, failed });
       }
     }
-  }
+  };
 
-  return { total: rows.length, success, failed, results };
-}
+  const workers = Array.from({ length: Math.min(CONCURRENCY, rows.length) }, () => runOne());
+  await Promise.all(workers);
 
-router.post('/prelogin', async (req: Request, res: Response) => {
-  try {
-    const { emails } = req.body as { emails?: string[] };
-    const result = await preloginAccounts(emails);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || String(err) });
-  }
+  send({ type: 'done', total, success, failed });
+  res.end();
 });
 
 router.get('/inbox', async (req: Request, res: Response) => {
