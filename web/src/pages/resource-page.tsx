@@ -126,13 +126,14 @@ const CONFIGS: Record<string, ResourceConfig> = {
     ],
     statCards: s => [
       { label: '可用', value: s?.available ?? 0 },
-      { label: 'Claude可用', value: s?.claudeAvailable ?? 0 },
-      { label: '已分配', value: s?.allocated ?? 0 },
+      { label: '静态', value: s?.byPool?.static?.available ?? 0 },
+      { label: '家宽', value: s?.byPool?.residential?.available ?? 0 },
     ],
     pullFields: [
-      { key: 'purpose', label: '用途', type: 'select', defaultValue: 'claude', required: true, options: [
-        { value: 'claude', label: 'Claude' },
-        { value: 'openai', label: 'OpenAI' },
+      { key: 'pool', label: '类型', type: 'select', defaultValue: '', options: [
+        { value: '', label: '全部' },
+        { value: 'static', label: '静态' },
+        { value: 'residential', label: '家宽' },
       ]},
       { key: 'region', label: '区域', type: 'select', defaultValue: '', options: [
         { value: '', label: '全部区域' },

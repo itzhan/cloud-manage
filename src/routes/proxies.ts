@@ -55,7 +55,7 @@ router.post('/import', (req: Request, res: Response) => {
 
 router.post('/pull', (req: Request, res: Response) => {
   const db = getDb();
-  const { count = 1, machineId, purpose = 'claude', region, pool, preview } = req.body;
+  const { count = 1, machineId, region, pool, preview } = req.body;
   if (!machineId) { res.status(400).json({ error: 'machineId required' }); return; }
 
   const now = new Date().toISOString();
@@ -64,20 +64,10 @@ router.post('/pull', (req: Request, res: Response) => {
     let query = `SELECT * FROM proxies WHERE bad = 0 AND deleted = 0 AND allocatedTo IS NULL`;
     const params: any[] = [];
 
-    if (purpose === 'claude') {
-      query += ` AND claudeUsed = 0`;
-    } else if (purpose === 'openai') {
-      query += ` AND openaiInUse = 0`;
-    }
     if (region) { query += ` AND region = ?`; params.push(region); }
     if (pool) { query += ` AND pool = ?`; params.push(pool); }
 
-    if (purpose === 'claude') {
-      query += ` ORDER BY claudeCount ASC`;
-    } else {
-      query += ` ORDER BY openaiCount ASC`;
-    }
-    query += ` LIMIT ?`;
+    query += ` ORDER BY addedAt DESC LIMIT ?`;
     params.push(count);
 
     const rows = db.prepare(query).all(...params) as any[];
@@ -168,7 +158,18 @@ router.get('/stats', (_req: Request, res: Response) => {
     regions[r.region || 'unknown'] = { total: r.total, available: r.available };
   }
 
-  res.json({ total, available, allocated, bad, claudeAvailable, byRegion: regions });
+  const byPool = db.prepare(`
+    SELECT pool, COUNT(*) as total,
+      SUM(CASE WHEN bad = 0 AND deleted = 0 AND allocatedTo IS NULL THEN 1 ELSE 0 END) as available
+    FROM proxies WHERE deleted = 0 GROUP BY pool
+  `).all() as any[];
+
+  const pools: Record<string, any> = {};
+  for (const p of byPool) {
+    pools[p.pool || 'static'] = { total: p.total, available: p.available };
+  }
+
+  res.json({ total, available, allocated, bad, claudeAvailable, byRegion: regions, byPool: pools });
 });
 
 export default router;
