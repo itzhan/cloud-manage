@@ -90,9 +90,10 @@ router.post('/text-import', (req: Request, res: Response) => {
   for (const line of lines) {
     const parts = line.split(/\s*-{2,}\s*/);
     if (parts.length >= 2) {
-      const email = parts[0].trim();
+      // 去掉"卡号："等中文前缀
+      let email = parts[0].trim().replace(/^[^\x00-\x7F]+[：:]\s*/, '');
       const password = parts[1].trim();
-      if (email && password) accounts.push({ email, password });
+      if (email && password && email.includes('@')) accounts.push({ email, password });
     }
   }
 
