@@ -53,6 +53,40 @@ router.post('/import', (req: Request, res: Response) => {
   res.json({ imported: tx() });
 });
 
+router.post('/text-import', (req: Request, res: Response) => {
+  const db = getDb();
+  const { text, pool = 'static', region = 'us' } = req.body;
+  if (!text || typeof text !== 'string') { res.status(400).json({ error: 'text is required' }); return; }
+
+  const lines = text.split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0 && !l.startsWith('#'));
+
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO proxies (id, host, port, user, pass, region, pool, claudeUsed, claudeCount, openaiCount, openaiInUse, openaiInUseCount, bad, bad_reason, deleted, deletedAt, addedAt)
+    VALUES (@id, @host, @port, @user, @pass, @region, @pool, 0, 0, 0, 0, 0, 0, NULL, 0, NULL, @addedAt)
+  `);
+
+  const now = new Date().toISOString();
+  const tx = db.transaction(() => {
+    let count = 0;
+    for (const line of lines) {
+      const parts = line.split(':');
+      if (parts.length < 4) continue;
+      const [host, port, user, pass] = parts;
+      stmt.run({
+        id: `proxy_${host}_${port}`,
+        host, port, user, pass,
+        region, pool, addedAt: now,
+      });
+      count++;
+    }
+    return count;
+  });
+
+  res.json({ imported: tx() });
+});
+
 router.post('/pull', (req: Request, res: Response) => {
   const db = getDb();
   const { count = 1, machineId, region, pool, preview } = req.body;

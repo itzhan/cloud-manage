@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { api, getMachineId, setMachineId } from '@/lib/api'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { api, getApiKey, getMachineId, setMachineId } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -242,6 +242,18 @@ export default function ResourcePage({ resource, title }: Props) {
   // Mailcom prelogin
   const [preloginLoading, setPreloginLoading] = useState(false)
   const [preloginMsg, setPreloginMsg] = useState('')
+  // Import mode
+  const [importMode, setImportMode] = useState<'text' | 'json'>('text')
+  // Cards brand
+  const [importBrand, setImportBrand] = useState('')
+  const [brands, setBrands] = useState<string[]>([])
+  const [newBrand, setNewBrand] = useState('')
+  // Proxy import
+  const [importPool, setImportPool] = useState('static')
+  const [importRegion, setImportRegion] = useState('us')
+  // Token progress
+  const [tokenProgress, setTokenProgress] = useState<{total:number,ok:number,failed:number}|null>(null)
+  const tokenPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const openInbox = async (email: string) => {
     setInboxEmail(email)
@@ -299,6 +311,83 @@ export default function ResourcePage({ resource, title }: Props) {
     setPreloginLoading(false)
   }
 
+  // Fetch brands when cards import dialog opens
+  useEffect(() => {
+    if (resource === 'cards' && showImport) {
+      fetch('/api/brands', { headers: { 'X-API-Key': getApiKey() } })
+        .then(r => r.ok ? r.json() : { brands: [] })
+        .then(d => setBrands(d.brands || []))
+        .catch(() => {})
+    }
+  }, [resource, showImport])
+
+  // Token caching progress polling
+  const startTokenPolling = useCallback(() => {
+    // Clear any existing poll
+    if (tokenPollRef.current) clearInterval(tokenPollRef.current)
+    const poll = () => {
+      fetch('/api/mailcom/prelogin-status', { headers: { 'X-API-Key': getApiKey() } })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (!d) return
+          setTokenProgress({ total: d.total, ok: d.ok, failed: d.failed })
+          if (d.ok + d.failed >= d.total) {
+            if (tokenPollRef.current) { clearInterval(tokenPollRef.current); tokenPollRef.current = null }
+          }
+        })
+        .catch(() => {})
+    }
+    poll()
+    tokenPollRef.current = setInterval(poll, 5000)
+  }, [])
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => { if (tokenPollRef.current) clearInterval(tokenPollRef.current) }
+  }, [])
+
+  const handleTextImport = async () => {
+    try {
+      let url = ''
+      let body: any = {}
+
+      if (resource === 'mailcom') {
+        url = '/api/mailcom/text-import'
+        body = { text: importText }
+      } else if (resource === 'cards') {
+        const brand = importBrand === '__new__' ? newBrand.trim() : importBrand
+        if (!brand) { setImportResult('错误: 请选择或输入品牌'); return }
+        url = '/api/cards/text-import'
+        body = { text: importText, brand }
+      } else if (resource === 'google') {
+        url = '/api/google/text-import'
+        body = { text: importText }
+      } else if (resource === 'proxies') {
+        url = '/api/proxies/text-import'
+        body = { text: importText, pool: importPool, region: importRegion }
+      }
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': getApiKey() },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setImportResult(`导入成功: ${JSON.stringify(data.imported)}`)
+      load()
+
+      // Start token polling after mailcom import
+      if (resource === 'mailcom') {
+        startTokenPolling()
+      }
+    } catch (e: any) {
+      setImportResult(`错误: ${e.message}`)
+    }
+  }
+
+  const TEXT_IMPORT_RESOURCES = new Set(['mailcom', 'cards', 'google', 'proxies'])
+
   const config = CONFIGS[resource]
   const limit = 20
 
@@ -333,6 +422,9 @@ export default function ResourcePage({ resource, title }: Props) {
       const res = await api.import(resource, body)
       setImportResult(`导入成功: ${JSON.stringify(res.imported)}`)
       load()
+      if (resource === 'mailcom') {
+        startTokenPolling()
+      }
     } catch (e: any) {
       setImportResult(`错误: ${e.message}`)
     }
@@ -418,11 +510,17 @@ export default function ResourcePage({ resource, title }: Props) {
               </Button>
             </a>
           )}
-          <Button size="sm" onClick={() => { setShowImport(true); setImportResult('') }}>
+          <Button size="sm" onClick={() => { setShowImport(true); setImportResult(''); setImportMode('text') }}>
             <Upload className="h-3.5 w-3.5 mr-1.5" />
             导入
           </Button>
           {preloginMsg && <span className="text-xs self-center text-muted-foreground">{preloginMsg}</span>}
+          {tokenProgress && (
+            <span className="text-xs self-center text-muted-foreground">
+              Token 缓存: {tokenProgress.ok}个/{tokenProgress.total}个{tokenProgress.failed > 0 ? ` (${tokenProgress.failed}个失败)` : ''}
+              {tokenProgress.ok + tokenProgress.failed < tokenProgress.total && ' 缓存中...'}
+            </span>
+          )}
         </div>
       </div>
 
@@ -580,24 +678,115 @@ export default function ResourcePage({ resource, title }: Props) {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>导入 {title}</DialogTitle>
-            <DialogDescription>粘贴 JSON 数据进行批量导入</DialogDescription>
+            <DialogDescription>批量导入资源数据</DialogDescription>
           </DialogHeader>
-          <textarea
-            value={importText}
-            onChange={e => setImportText(e.target.value)}
-            placeholder={config.importPlaceholder}
-            rows={12}
-            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
-          />
-          {importResult && (
-            <p className={`text-sm ${importResult.startsWith('错误') ? 'text-destructive' : 'text-emerald-600'}`}>
-              {importResult}
-            </p>
+
+          {/* Tab switcher - only show if resource supports text import */}
+          {TEXT_IMPORT_RESOURCES.has(resource) && (
+            <div className="flex gap-1 border-b pb-0">
+              <button
+                className={`px-3 py-1.5 text-sm font-medium rounded-t-md transition-colors ${importMode === 'text' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                onClick={() => setImportMode('text')}
+              >
+                手动导入
+              </button>
+              <button
+                className={`px-3 py-1.5 text-sm font-medium rounded-t-md transition-colors ${importMode === 'json' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                onClick={() => setImportMode('json')}
+              >
+                JSON 导入
+              </button>
+            </div>
           )}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowImport(false)}>取消</Button>
-            <Button onClick={handleImport} disabled={!importText.trim()}>导入</Button>
-          </div>
+
+          {importMode === 'text' && TEXT_IMPORT_RESOURCES.has(resource) ? (
+            <div className="space-y-4">
+              {/* Cards: brand selector */}
+              {resource === 'cards' && (
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">品牌 *</label>
+                  <select
+                    value={importBrand}
+                    onChange={e => setImportBrand(e.target.value)}
+                    className={SELECT_CLS}
+                  >
+                    <option value="">选择品牌...</option>
+                    {brands.map(b => <option key={b} value={b}>{b}</option>)}
+                    <option value="__new__">+ 新建品牌</option>
+                  </select>
+                  {importBrand === '__new__' && (
+                    <input
+                      value={newBrand}
+                      onChange={e => setNewBrand(e.target.value)}
+                      placeholder="输入新品牌名称"
+                      className={INPUT_CLS + ' mt-2'}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Proxies: pool + region selectors */}
+              {resource === 'proxies' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">代理池</label>
+                    <select value={importPool} onChange={e => setImportPool(e.target.value)} className={SELECT_CLS}>
+                      <option value="static">静态</option>
+                      <option value="residential">家宽</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">区域</label>
+                    <select value={importRegion} onChange={e => setImportRegion(e.target.value)} className={SELECT_CLS}>
+                      <option value="us">us</option>
+                      <option value="ph">ph</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <textarea
+                value={importText}
+                onChange={e => setImportText(e.target.value)}
+                placeholder={
+                  resource === 'mailcom' ? '每行一个: 邮箱------密码' :
+                  resource === 'cards' ? '每行一张卡（Tab或空格分隔）:\n序号  卡号  有效期  CVV  持卡人  州  城市  地址  邮编' :
+                  resource === 'google' ? '每行一个（-- 分隔）:\n邮箱 -- 密码 -- 备用邮箱 -- 2FA密钥' :
+                  resource === 'proxies' ? '每行一个: host:port:user:pass' : ''
+                }
+                rows={12}
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+              />
+              {importResult && (
+                <p className={`text-sm ${importResult.startsWith('错误') ? 'text-destructive' : 'text-emerald-600'}`}>
+                  {importResult}
+                </p>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowImport(false)}>取消</Button>
+                <Button onClick={handleTextImport} disabled={!importText.trim()}>导入</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <textarea
+                value={importText}
+                onChange={e => setImportText(e.target.value)}
+                placeholder={config.importPlaceholder}
+                rows={12}
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+              />
+              {importResult && (
+                <p className={`text-sm ${importResult.startsWith('错误') ? 'text-destructive' : 'text-emerald-600'}`}>
+                  {importResult}
+                </p>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowImport(false)}>取消</Button>
+                <Button onClick={handleImport} disabled={!importText.trim()}>导入</Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

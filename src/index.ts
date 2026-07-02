@@ -12,6 +12,7 @@ import registeredRouter from './routes/registered';
 import openaiRouter from './routes/openai';
 import statsRouter from './routes/stats';
 import apiKeysRouter, { allocationLogRouter } from './routes/api-keys';
+import brandsRouter from './routes/brands';
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/proxies', proxiesRouter);
 app.use('/api/registered', registeredRouter);
 app.use('/api/openai', openaiRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/brands', brandsRouter);
 app.use('/api/keys', apiKeysRouter);
 app.use('/api/allocation-log', allocationLogRouter);
 
