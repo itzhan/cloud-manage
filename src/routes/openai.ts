@@ -142,7 +142,8 @@ router.get('/export', (req: Request, res: Response) => {
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const out = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const buf = Buffer.from(out);
 
   const status = (req.query.status as string) || 'all';
   const date = new Date().toISOString().slice(0, 10);
@@ -150,7 +151,8 @@ router.get('/export', (req: Request, res: Response) => {
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.send(buf);
+  res.setHeader('Content-Length', String(buf.length));
+  res.end(buf);
 });
 
 export default router;

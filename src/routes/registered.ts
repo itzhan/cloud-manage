@@ -121,7 +121,8 @@ router.get('/export', (req: Request, res: Response) => {
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  const out = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const buf = Buffer.from(out);
 
   // 导出后标记
   if (rows.length > 0) {
@@ -134,6 +135,7 @@ router.get('/export', (req: Request, res: Response) => {
   const date = new Date().toISOString().slice(0, 10);
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="registered_${status}_${date}.xlsx"`);
+  res.setHeader('Content-Length', String(buf.length));
   res.end(buf);
 });
 
