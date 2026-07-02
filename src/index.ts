@@ -8,6 +8,8 @@ import codexRouter from './routes/codex';
 import mailcomRouter from './routes/mailcom';
 import googleRouter from './routes/google';
 import proxiesRouter from './routes/proxies';
+import registeredRouter from './routes/registered';
+import openaiRouter from './routes/openai';
 import statsRouter from './routes/stats';
 import apiKeysRouter, { allocationLogRouter } from './routes/api-keys';
 
@@ -30,6 +32,8 @@ app.use('/api/codex', codexRouter);
 app.use('/api/mailcom', mailcomRouter);
 app.use('/api/google', googleRouter);
 app.use('/api/proxies', proxiesRouter);
+app.use('/api/registered', registeredRouter);
+app.use('/api/openai', openaiRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/keys', apiKeysRouter);
 app.use('/api/allocation-log', allocationLogRouter);

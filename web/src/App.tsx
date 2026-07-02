@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { LayoutDashboard, CreditCard, Mail, Chrome, Globe, Key, Settings, LogIn, ClipboardList } from 'lucide-react'
+import { LayoutDashboard, CreditCard, Mail, Chrome, Globe, Key, Settings, LogIn, ClipboardList, ShieldCheck, UserPlus } from 'lucide-react'
 import { api, getApiKey, setApiKey } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -15,6 +15,8 @@ const NAV = [
   { id: 'mailcom', label: 'Mail.com', icon: Mail },
   { id: 'proxies', label: '代理 IP', icon: Globe },
   { id: 'codex', label: 'Codex', icon: Key },
+  { id: 'registered', label: 'Claude官Key', icon: ShieldCheck },
+  { id: 'openai', label: 'OpenAI官Key', icon: UserPlus },
   { id: 'log', label: '分配记录', icon: ClipboardList },
   { id: 'keys', label: '密钥管理', icon: Settings },
 ] as const
@@ -121,6 +123,8 @@ export default function App() {
           {page === 'mailcom' && <ResourcePage resource="mailcom" title="Mail.com 邮箱" />}
           {page === 'proxies' && <ResourcePage resource="proxies" title="代理 IP" />}
           {page === 'codex' && <ResourcePage resource="codex" title="Codex 凭证" />}
+          {page === 'registered' && <ResourcePage resource="registered" title="Claude 官Key" />}
+          {page === 'openai' && <ResourcePage resource="openai" title="OpenAI 官Key" />}
           {page === 'log' && <AllocationLog />}
           {page === 'keys' && <ApiKeysPage />}
         </div>

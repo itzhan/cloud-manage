@@ -35,6 +35,14 @@ router.get('/', (_req: Request, res: Response) => {
       available: count('codex_credentials', 'allocatedTo IS NULL AND usedInvites < maxInvites'),
       allocated: count('codex_credentials', 'allocatedTo IS NOT NULL'),
     },
+    registered: {
+      total: count('registered_accounts'),
+      authorized: count('registered_accounts', "status = 'authorized'"),
+    },
+    openai: {
+      total: count('openai_keys'),
+      active: count('openai_keys', "oaiStatus = '' OR oaiStatus IS NULL"),
+    },
   });
 });
 

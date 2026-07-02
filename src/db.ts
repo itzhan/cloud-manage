@@ -157,6 +157,49 @@ function initTables(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_proxies_allocated ON proxies(allocatedTo);
     CREATE INDEX IF NOT EXISTS idx_proxies_region ON proxies(region);
 
+    CREATE TABLE IF NOT EXISTS registered_accounts (
+      email           TEXT PRIMARY KEY,
+      status          TEXT DEFAULT 'registered',
+      plan_type       TEXT,
+      session_key     TEXT,
+      platform        TEXT,
+      registered_at   TEXT,
+      paid_at         TEXT,
+      authorized_at   TEXT,
+      paid_card       TEXT,
+      paid_card_brand TEXT,
+      proxy_host      TEXT,
+      google_email    TEXT,
+      browser_id      TEXT,
+      sourceKeyName   TEXT,
+      uploadedAt      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_registered_status ON registered_accounts(status);
+    CREATE INDEX IF NOT EXISTS idx_registered_source ON registered_accounts(sourceKeyName);
+
+    CREATE TABLE IF NOT EXISTS openai_keys (
+      id              TEXT PRIMARY KEY,
+      email           TEXT NOT NULL,
+      password        TEXT,
+      gptPassword     TEXT,
+      twoFaSecret     TEXT,
+      rt              TEXT,
+      msRefreshToken  TEXT,
+      tokenStatus     TEXT DEFAULT 'pending',
+      tokenError      TEXT,
+      planType        TEXT,
+      paidAt          TEXT,
+      paidCard        TEXT,
+      paidCardBrand   TEXT,
+      oaiStatus       TEXT DEFAULT '',
+      sub2apiImports  TEXT DEFAULT '[]',
+      addedAt         TEXT,
+      sourceKeyName   TEXT,
+      uploadedAt      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_openai_source ON openai_keys(sourceKeyName);
+    CREATE INDEX IF NOT EXISTS idx_openai_status ON openai_keys(oaiStatus);
+
     CREATE TABLE IF NOT EXISTS allocation_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       resource TEXT NOT NULL,

@@ -43,7 +43,7 @@ export function saveApiKeys(keys: ApiKeyEntry[]): void {
 }
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
-  const key = req.headers['x-api-key'] as string;
+  const key = (req.headers['x-api-key'] as string) || (req.query._key as string);
   if (!key) {
     res.status(401).json({ error: 'Unauthorized' });
     return;

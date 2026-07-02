@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { RefreshCw, Upload, Download, ChevronLeft, ChevronRight, Copy, Check, KeyRound, Mail } from 'lucide-react'
+import { RefreshCw, Upload, Download, ChevronLeft, ChevronRight, Copy, Check, KeyRound, Mail, FileDown } from 'lucide-react'
 
 interface ColumnDef {
   key: string
@@ -164,7 +164,49 @@ const CONFIGS: Record<string, ResourceConfig> = {
     ],
     pullResultKey: 'credentials',
   },
+  registered: {
+    importKey: 'accounts',
+    importPlaceholder: '粘贴 registered accounts JSON 数组',
+    columns: [
+      { key: 'email', label: '邮箱', className: 'font-mono text-xs' },
+      { key: 'status', label: '状态', render: (v: any) => {
+        const colors: Record<string, string> = { authorized: 'success', banned: 'destructive', registered: 'secondary' }
+        return <Badge variant={(colors[v] || 'secondary') as any}>{v}</Badge>
+      }},
+      { key: 'plan_type', label: '套餐' },
+      { key: 'platform', label: '平台' },
+      { key: 'session_key', label: 'SK', render: (v: any) => v ? <span className="font-mono text-xs">{String(v).slice(0, 8)}...</span> : '—' },
+      { key: 'sourceKeyName', label: '来源', render: (v: any) => v ? <Badge variant="outline">{v}</Badge> : '—' },
+    ],
+    statCards: s => [
+      { label: '总数', value: s?.total ?? 0 },
+      { label: '已授权', value: s?.byStatus?.authorized ?? 0 },
+      { label: '已封', value: s?.byStatus?.banned ?? 0 },
+    ],
+    pullFields: [],
+    pullResultKey: 'accounts',
+  },
+  openai: {
+    importKey: 'accounts',
+    importPlaceholder: '粘贴 openai accounts JSON 数组',
+    columns: [
+      { key: 'email', label: '邮箱', className: 'font-mono text-xs' },
+      { key: 'planType', label: '套餐', render: (v: any) => v ? <Badge variant="secondary">{v}</Badge> : '—' },
+      { key: 'oaiStatus', label: '状态', render: (v: any) => !v || v === '' ? <Badge variant="success">正常</Badge> : <Badge variant="destructive">{v}</Badge> },
+      { key: 'hasToken', label: 'Token', render: (v: any) => v ? <Badge variant="success">有</Badge> : <span className="text-muted-foreground">—</span> },
+      { key: 'sourceKeyName', label: '来源', render: (v: any) => v ? <Badge variant="outline">{v}</Badge> : '—' },
+    ],
+    statCards: s => [
+      { label: '总数', value: s?.total ?? 0 },
+      { label: '正常', value: s?.active ?? 0 },
+      { label: '来源数', value: s?.bySource ? Object.keys(s.bySource).length : 0 },
+    ],
+    pullFields: [],
+    pullResultKey: 'accounts',
+  },
 }
+
+const EXPORTABLE = new Set(['registered', 'openai', 'cards'])
 
 const INPUT_CLS = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 const SELECT_CLS = INPUT_CLS + ' appearance-none'
@@ -368,6 +410,14 @@ export default function ResourcePage({ resource, title }: Props) {
             <Download className="h-3.5 w-3.5 mr-1.5" />
             拉取
           </Button>
+          {EXPORTABLE.has(resource) && (
+            <a href={`/api/${resource}/export`} target="_blank" rel="noopener noreferrer"
+              onClick={e => { e.preventDefault(); window.open(`/api/${resource}/export?_key=${encodeURIComponent((window as any).__apiKey || localStorage.getItem('resource-hub-api-key') || '')}`, '_blank') }}>
+              <Button variant="outline" size="sm" type="button">
+                <FileDown className="h-3.5 w-3.5 mr-1.5" />导出
+              </Button>
+            </a>
+          )}
           <Button size="sm" onClick={() => { setShowImport(true); setImportResult('') }}>
             <Upload className="h-3.5 w-3.5 mr-1.5" />
             导入
