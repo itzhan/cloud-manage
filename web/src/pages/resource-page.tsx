@@ -224,6 +224,8 @@ export default function ResourcePage({ resource, title }: Props) {
   const [loading, setLoading] = useState(true)
   const [exportedFilter, setExportedFilter] = useState<'' | '0' | '1'>('')
   const [exportCount, setExportCount] = useState(30)
+  const [pushingHub, setPushingHub] = useState(false)
+  const [pushHubMsg, setPushHubMsg] = useState('')
   // Import
   const [showImport, setShowImport] = useState(false)
   const [importText, setImportText] = useState('')
@@ -566,10 +568,29 @@ export default function ResourcePage({ resource, title }: Props) {
               <FileDown className="h-3.5 w-3.5 mr-1.5" />导出{(resource === 'registered' || resource === 'openai') ? ` (${exportCount})` : ''}
             </Button>
           </>)}
+          {resource === 'registered' && (
+            <Button variant="outline" size="sm" disabled={pushingHub} onClick={async () => {
+              setPushingHub(true); setPushHubMsg('')
+              try {
+                const resp = await fetch('/api/registered/push-to-hub', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': getApiKey() },
+                  body: JSON.stringify({ count: exportCount }),
+                })
+                const d = await resp.json()
+                if (!resp.ok) throw new Error(d.error)
+                setPushHubMsg(`已推送 ${d.pushed} 个到上号中枢`)
+                load()
+              } catch (e: any) { setPushHubMsg(`错误: ${e.message}`) }
+              setPushingHub(false)
+            }}>
+              <Upload className="h-3.5 w-3.5 mr-1.5" />{pushingHub ? '推送中...' : `推送上号 (${exportCount})`}
+            </Button>
+          )}
           <Button size="sm" onClick={() => { setShowImport(true); setImportResult(''); setImportMode('text') }}>
             <Upload className="h-3.5 w-3.5 mr-1.5" />
             导入
           </Button>
+          {pushHubMsg && <span className="text-xs self-center text-emerald-600">{pushHubMsg}</span>}
           {preloginMsg && <span className="text-xs self-center text-muted-foreground">{preloginMsg}</span>}
           {tokenProgress && (
             <span className="text-xs self-center text-muted-foreground">

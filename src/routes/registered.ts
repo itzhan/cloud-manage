@@ -175,4 +175,40 @@ router.post('/text-import', (req: Request, res: Response) => {
   res.json({ imported: result.count, skipped: result.skipped });
 });
 
+// 推送未导出的 key 到上号中枢
+router.post('/push-to-hub', async (req: Request, res: Response) => {
+  const db = getDb();
+  const { hubUrl = 'http://38.34.191.113:3104', count } = req.body as { hubUrl?: string; count?: number };
+
+  const limit = count ? `LIMIT ${count}` : '';
+  const rows = db.prepare(`SELECT email, session_key FROM registered_accounts WHERE (exported = 0 OR exported IS NULL) AND session_key IS NOT NULL AND session_key != '' ORDER BY uploadedAt DESC ${limit}`).all() as any[];
+
+  if (rows.length === 0) {
+    res.json({ pushed: 0, message: '没有未导出的 key' });
+    return;
+  }
+
+  const keys = rows.map((r: any) => r.session_key);
+
+  try {
+    const resp = await fetch(`${hubUrl}/api/keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys }),
+    });
+    const data = await resp.json() as any;
+    if (!data.success) throw new Error(data.error || 'push failed');
+
+    // 标记为已导出
+    const emails = rows.map((r: any) => r.email);
+    const placeholders = emails.map(() => '?').join(',');
+    db.prepare(`UPDATE registered_accounts SET exported = 1, exportedAt = ? WHERE email IN (${placeholders})`).run(new Date().toISOString(), ...emails);
+
+    logAllocation(db, 'registered_accounts', 'push-to-hub', req.keyName || '未知', keys.length, { hubUrl });
+    res.json({ pushed: data.data?.added ?? keys.length, total: data.data?.total, skipped: 0 });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;
