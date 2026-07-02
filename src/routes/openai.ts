@@ -26,14 +26,19 @@ router.post('/import', (req: Request, res: Response) => {
   const now = new Date().toISOString();
   const sourceKeyName = req.keyName || '未知';
 
+  // 先查已有的 apiKey 用于去重
+  const existingKeys = new Set(
+    (db.prepare('SELECT apiKey FROM openai_keys WHERE apiKey IS NOT NULL').all() as any[]).map(r => r.apiKey)
+  );
   const stmt = db.prepare(`
     INSERT OR REPLACE INTO openai_keys (id, email, apiKey, status, sourceKeyName, uploadedAt)
     VALUES (@id, @email, @apiKey, @status, @sourceKeyName, @uploadedAt)
   `);
 
   const tx = db.transaction(() => {
-    let count = 0;
+    let count = 0, skipped = 0;
     for (const a of accounts) {
+      if (a.apiKey && existingKeys.has(a.apiKey)) { skipped++; continue; }
       stmt.run({
         id: a.id || `ok_${Date.now()}_${String(count).padStart(4, '0')}`,
         email: a.email || '',
@@ -42,14 +47,15 @@ router.post('/import', (req: Request, res: Response) => {
         sourceKeyName,
         uploadedAt: now,
       });
+      if (a.apiKey) existingKeys.add(a.apiKey);
       count++;
     }
-    return count;
+    return { count, skipped };
   });
 
-  const imported = tx();
-  logAllocation(db, 'openai_keys', 'upload', sourceKeyName, imported);
-  res.json({ imported });
+  const result = tx();
+  logAllocation(db, 'openai_keys', 'upload', sourceKeyName, result.count);
+  res.json({ imported: result.count, skipped: result.skipped });
 });
 
 router.put('/exported', (req: Request, res: Response) => {
@@ -105,6 +111,35 @@ router.get('/export', (req: Request, res: Response) => {
   res.setHeader('Content-Disposition', `attachment; filename="openai_keys_${date}.txt"`);
   res.setHeader('Content-Length', String(Buffer.byteLength(text)));
   res.end(text);
+});
+
+// 文本格式导入子弹（每行一个 apiKey）
+router.post('/text-import', (req: Request, res: Response) => {
+  const db = getDb();
+  const { text = '' } = req.body as { text?: string };
+  const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l && l.length > 10);
+  if (lines.length === 0) { res.json({ imported: 0, skipped: 0 }); return; }
+
+  const sourceKeyName = req.keyName || '未知';
+  const now = new Date().toISOString();
+  const existingKeys = new Set(
+    (db.prepare("SELECT apiKey FROM openai_keys WHERE apiKey IS NOT NULL AND apiKey != ''").all() as any[]).map(r => r.apiKey)
+  );
+
+  const stmt = db.prepare(`INSERT INTO openai_keys (id, email, apiKey, status, sourceKeyName, uploadedAt) VALUES (?, '', ?, 'active', ?, ?)`);
+  const tx = db.transaction(() => {
+    let count = 0, skipped = 0;
+    for (const key of lines) {
+      if (existingKeys.has(key)) { skipped++; continue; }
+      stmt.run(`ok_${Date.now()}_${count}`, key, sourceKeyName, now);
+      existingKeys.add(key);
+      count++;
+    }
+    return { count, skipped };
+  });
+  const result = tx();
+  logAllocation(db, 'openai_keys', 'text-import', sourceKeyName, result.count);
+  res.json({ imported: result.count, skipped: result.skipped });
 });
 
 export default router;

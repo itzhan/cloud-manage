@@ -13,6 +13,7 @@ import openaiRouter from './routes/openai';
 import statsRouter from './routes/stats';
 import apiKeysRouter, { allocationLogRouter } from './routes/api-keys';
 import brandsRouter from './routes/brands';
+import aicardRouter from './routes/aicard';
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use('/api/stats', statsRouter);
 app.use('/api/brands', brandsRouter);
 app.use('/api/keys', apiKeysRouter);
 app.use('/api/allocation-log', allocationLogRouter);
+app.use('/api/aicard', aicardRouter);
 
 // SPA fallback
 app.get('*', (_req, res) => {

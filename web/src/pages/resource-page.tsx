@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { RefreshCw, Upload, Download, ChevronLeft, ChevronRight, Copy, Check, KeyRound, Mail, FileDown } from 'lucide-react'
+import { RefreshCw, Upload, Download, ChevronLeft, ChevronRight, Copy, Check, KeyRound, Mail, FileDown, ShoppingCart } from 'lucide-react'
 
 interface ColumnDef {
   key: string
@@ -256,6 +256,15 @@ export default function ResourcePage({ resource, title }: Props) {
   // Token progress
   const [tokenProgress, setTokenProgress] = useState<{total:number,ok:number,failed:number}|null>(null)
   const tokenPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // AICard purchase
+  const [showAicard, setShowAicard] = useState(false)
+  const [aicardBalance, setAicardBalance] = useState<{ merchantBalance: number; customerAllocated: number } | null>(null)
+  const [aicardCount, setAicardCount] = useState(10)
+  const [aicardAmount, setAicardAmount] = useState(10)
+  const [aicardBrand, setAicardBrand] = useState('AICard-API')
+  const [aicardConcurrency, setAicardConcurrency] = useState(5)
+  const [aicardRunning, setAicardRunning] = useState(false)
+  const [aicardProgress, setAicardProgress] = useState('')
 
   const openInbox = async (email: string) => {
     setInboxEmail(email)
@@ -367,6 +376,12 @@ export default function ResourcePage({ resource, title }: Props) {
       } else if (resource === 'proxies') {
         url = '/api/proxies/text-import'
         body = { text: importText, pool: importPool, region: importRegion }
+      } else if (resource === 'registered') {
+        url = '/api/registered/text-import'
+        body = { text: importText }
+      } else if (resource === 'openai') {
+        url = '/api/openai/text-import'
+        body = { text: importText }
       }
 
       const res = await fetch(url, {
@@ -388,7 +403,7 @@ export default function ResourcePage({ resource, title }: Props) {
     }
   }
 
-  const TEXT_IMPORT_RESOURCES = new Set(['mailcom', 'cards', 'google', 'proxies'])
+  const TEXT_IMPORT_RESOURCES = new Set(['mailcom', 'cards', 'google', 'proxies', 'registered', 'openai'])
 
   const config = CONFIGS[resource]
   const limit = 20
@@ -508,6 +523,20 @@ export default function ResourcePage({ resource, title }: Props) {
             <Button variant="outline" size="sm" onClick={doPrelogin} disabled={preloginLoading}>
               <KeyRound className="h-3.5 w-3.5 mr-1.5" />
               {preloginLoading ? '缓存中...' : '缓存Token'}
+            </Button>
+          )}
+          {resource === 'cards' && (
+            <Button variant="outline" size="sm" onClick={async () => {
+              setShowAicard(true)
+              setAicardProgress('')
+              setAicardBalance(null)
+              try {
+                const res = await fetch('/api/aicard/balance', { headers: { 'X-API-Key': getApiKey() } })
+                if (res.ok) setAicardBalance(await res.json())
+              } catch { /* ignore */ }
+            }}>
+              <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
+              AICard 买卡
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={openPull}>
@@ -792,7 +821,9 @@ export default function ResourcePage({ resource, title }: Props) {
                   resource === 'mailcom' ? '每行一个: 邮箱------密码' :
                   resource === 'cards' ? '每行一张卡（Tab或空格分隔）:\n序号  卡号  有效期  CVV  持卡人  州  城市  地址  邮编' :
                   resource === 'google' ? '每行一个（-- 分隔）:\n邮箱 -- 密码 -- 备用邮箱 -- 2FA密钥' :
-                  resource === 'proxies' ? '每行一个: host:port:user:pass' : ''
+                  resource === 'proxies' ? '每行一个: host:port:user:pass' :
+                  resource === 'registered' ? '每行一个Key，自动去重' :
+                  resource === 'openai' ? '每行一个Key，自动去重' : ''
                 }
                 rows={12}
                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
@@ -883,6 +914,107 @@ export default function ResourcePage({ resource, title }: Props) {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* AICard Purchase Dialog */}
+      <Dialog open={showAicard} onOpenChange={v => { if (!aicardRunning) setShowAicard(v) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>AICard 买卡</DialogTitle>
+            <DialogDescription>通过 AICard API 批量购买虚拟卡</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Balance info */}
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              {aicardBalance ? (
+                <div className="flex justify-between">
+                  <span>商户余额: <strong className="tabular-nums">${aicardBalance.merchantBalance.toFixed(2)}</strong></span>
+                  <span>客户已分配: <strong className="tabular-nums">${aicardBalance.customerAllocated.toFixed(2)}</strong></span>
+                </div>
+              ) : (
+                <span className="text-muted-foreground">加载余额中...</span>
+              )}
+            </div>
+
+            {/* Purchase form */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">数量</label>
+                <input type="number" min={1} value={aicardCount} onChange={e => setAicardCount(Math.max(1, Number(e.target.value) || 1))} className={INPUT_CLS} disabled={aicardRunning} />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">每张金额 (USD)</label>
+                <input type="number" min={1} value={aicardAmount} onChange={e => setAicardAmount(Math.max(1, Number(e.target.value) || 1))} className={INPUT_CLS} disabled={aicardRunning} />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">品牌</label>
+                <input value={aicardBrand} onChange={e => setAicardBrand(e.target.value)} className={INPUT_CLS} disabled={aicardRunning} />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">并发数</label>
+                <input type="number" min={1} max={20} value={aicardConcurrency} onChange={e => setAicardConcurrency(Math.max(1, Math.min(20, Number(e.target.value) || 1)))} className={INPUT_CLS} disabled={aicardRunning} />
+              </div>
+            </div>
+
+            {/* Cost estimation */}
+            <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
+              <p>预计费用: <strong className="tabular-nums">{aicardCount * (aicardAmount + 1)} USD</strong> (含 $1/张手续费)</p>
+              {aicardBalance && (
+                <p>可买约 <strong className="tabular-nums">{Math.floor(aicardBalance.merchantBalance / (aicardAmount + 1))}</strong> 张</p>
+              )}
+            </div>
+
+            {/* Progress */}
+            {aicardProgress && (
+              <p className={`text-sm ${aicardProgress.startsWith('错误') ? 'text-destructive' : 'text-emerald-600'}`}>
+                {aicardProgress}
+              </p>
+            )}
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowAicard(false)} disabled={aicardRunning}>关闭</Button>
+              <Button disabled={aicardRunning} onClick={async () => {
+                setAicardRunning(true)
+                setAicardProgress('启动中...')
+                try {
+                  const res = await fetch('/api/aicard/purchase', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-API-Key': getApiKey() },
+                    body: JSON.stringify({ count: aicardCount, amount: aicardAmount, brand: aicardBrand, concurrency: aicardConcurrency }),
+                  })
+                  if (!res.ok || !res.body) throw new Error('请求失败')
+                  const reader = res.body.getReader()
+                  const decoder = new TextDecoder()
+                  let buf = ''
+                  while (true) {
+                    const { done, value } = await reader.read()
+                    if (done) break
+                    buf += decoder.decode(value, { stream: true })
+                    const lines = buf.split('\n')
+                    buf = lines.pop() || ''
+                    for (const line of lines) {
+                      if (!line.startsWith('data: ')) continue
+                      try {
+                        const ev = JSON.parse(line.slice(6))
+                        if (ev.type === 'funding') setAicardProgress('充值中...')
+                        else if (ev.type === 'card_created') setAicardProgress(`创建 ${ev.idx}/${ev.total}...`)
+                        else if (ev.type === 'revealed') setAicardProgress(`获取卡号 ${ev.idx}/${ev.total}...`)
+                        else if (ev.type === 'done') { setAicardProgress(`完成！创建 ${ev.created} 张卡`); load() }
+                        else if (ev.type === 'error') setAicardProgress(`错误: ${ev.message}`)
+                      } catch { /* skip */ }
+                    }
+                  }
+                } catch (e: any) {
+                  setAicardProgress(`错误: ${e.message}`)
+                }
+                setAicardRunning(false)
+              }}>
+                {aicardRunning ? '购买中...' : '购买'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
