@@ -195,11 +195,12 @@ const CONFIGS: Record<string, ResourceConfig> = {
       { key: 'oaiStatus', label: '状态', render: (v: any) => !v || v === '' ? <Badge variant="success">正常</Badge> : <Badge variant="destructive">{v}</Badge> },
       { key: 'hasToken', label: 'Token', render: (v: any) => v ? <Badge variant="success">有</Badge> : <span className="text-muted-foreground">—</span> },
       { key: 'sourceKeyName', label: '来源', render: (v: any) => v ? <Badge variant="outline">{v}</Badge> : '—' },
+      { key: 'exported', label: '导出', render: (v: any) => v ? <Badge variant="secondary">已导出</Badge> : <Badge variant="success">未导出</Badge> },
     ],
     statCards: s => [
       { label: '总数', value: s?.total ?? 0 },
-      { label: '正常', value: s?.active ?? 0 },
-      { label: '来源数', value: s?.bySource ? Object.keys(s.bySource).length : 0 },
+      { label: '未导出', value: s?.unexported ?? 0 },
+      { label: '已导出', value: s?.exported ?? 0 },
     ],
     pullFields: [],
     pullResultKey: 'accounts',
@@ -222,6 +223,7 @@ export default function ResourcePage({ resource, title }: Props) {
   const [page, setPage] = useState(1)
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [exportedFilter, setExportedFilter] = useState<'' | '0' | '1'>('')
   // Import
   const [showImport, setShowImport] = useState(false)
   const [importText, setImportText] = useState('')
@@ -394,8 +396,10 @@ export default function ResourcePage({ resource, title }: Props) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
+      const params: Record<string, string> = { page: String(page), limit: String(limit) }
+      if (exportedFilter && (resource === 'registered' || resource === 'openai')) params.exported = exportedFilter
       const [listRes, statsRes] = await Promise.all([
-        api.list(resource, { page: String(page), limit: String(limit) }),
+        api.list(resource, params),
         api.resourceStats(resource),
       ])
       setData(listRes.data)
@@ -403,7 +407,7 @@ export default function ResourcePage({ resource, title }: Props) {
       setStats(statsRes)
     } catch { /* ignore */ }
     setLoading(false)
-  }, [resource, page])
+  }, [resource, page, exportedFilter])
 
   useEffect(() => { load() }, [load])
   useEffect(() => { setPage(1) }, [resource])
@@ -487,7 +491,15 @@ export default function ResourcePage({ resource, title }: Props) {
           <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
           <p className="text-sm text-muted-foreground mt-0.5">共 {total} 条记录</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {(resource === 'registered' || resource === 'openai') && (
+            <select value={exportedFilter} onChange={e => { setExportedFilter(e.target.value as any); setPage(1) }}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+              <option value="">全部</option>
+              <option value="0">未导出</option>
+              <option value="1">已导出</option>
+            </select>
+          )}
           <Button variant="outline" size="sm" onClick={load}>
             <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
             刷新
@@ -558,14 +570,14 @@ export default function ResourcePage({ resource, title }: Props) {
                     {col.label}
                   </th>
                 ))}
-                {resource === 'mailcom' && <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">操作</th>}
+                {(resource === 'mailcom' || resource === 'registered' || resource === 'openai') && <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">操作</th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={config.columns.length + (resource === 'mailcom' ? 1 : 0)} className="text-center py-12 text-muted-foreground">加载中...</td></tr>
+                <tr><td colSpan={config.columns.length + (['mailcom','registered','openai'].includes(resource) ? 1 : 0)} className="text-center py-12 text-muted-foreground">加载中...</td></tr>
               ) : data.length === 0 ? (
-                <tr><td colSpan={config.columns.length + (resource === 'mailcom' ? 1 : 0)} className="text-center py-12 text-muted-foreground">暂无数据</td></tr>
+                <tr><td colSpan={config.columns.length + (['mailcom','registered','openai'].includes(resource) ? 1 : 0)} className="text-center py-12 text-muted-foreground">暂无数据</td></tr>
               ) : (
                 data.map((row, i) => (
                   <tr key={row.id || i} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
@@ -579,6 +591,19 @@ export default function ResourcePage({ resource, title }: Props) {
                         <button onClick={() => openInbox(row.email)} className="p-1 rounded hover:bg-accent" title="查看收件箱">
                           <Mail className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
                         </button>
+                      </td>
+                    )}
+                    {(resource === 'registered' || resource === 'openai') && (
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <button className="text-[11px] text-muted-foreground hover:text-foreground underline" onClick={async () => {
+                          const idKey = resource === 'registered' ? 'emails' : 'ids'
+                          const idVal = resource === 'registered' ? [row.email] : [row.id]
+                          await fetch(`/api/${resource}/exported`, {
+                            method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-API-Key': getApiKey() },
+                            body: JSON.stringify({ [idKey]: idVal, exported: !row.exported }),
+                          })
+                          load()
+                        }}>{row.exported ? '取消导出' : '标记导出'}</button>
                       </td>
                     )}
                   </tr>

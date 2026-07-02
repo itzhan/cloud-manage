@@ -223,8 +223,10 @@ function migrateMailcomTokenColumns(db: Database.Database) {
 }
 
 function migrateRegisteredExported(db: Database.Database) {
-  for (const col of ['exported INTEGER DEFAULT 0', 'exportedAt TEXT']) {
-    try { db.exec(`ALTER TABLE registered_accounts ADD COLUMN ${col}`); } catch { /* exists */ }
+  for (const tbl of ['registered_accounts', 'openai_keys']) {
+    for (const col of ['exported INTEGER DEFAULT 0', 'exportedAt TEXT']) {
+      try { db.exec(`ALTER TABLE ${tbl} ADD COLUMN ${col}`); } catch { /* exists */ }
+    }
+    try { db.exec(`CREATE INDEX IF NOT EXISTS idx_${tbl}_exported ON ${tbl}(exported)`); } catch { /* ignore */ }
   }
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_registered_exported ON registered_accounts(exported)'); } catch { /* ignore */ }
 }
