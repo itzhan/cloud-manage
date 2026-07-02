@@ -38,6 +38,7 @@ router.get('/', (_req: Request, res: Response) => {
     registered: {
       total: count('registered_accounts'),
       authorized: count('registered_accounts', "status = 'authorized'"),
+      unexported: count('registered_accounts', "exported = 0 OR exported IS NULL"),
     },
     openai: {
       total: count('openai_keys'),

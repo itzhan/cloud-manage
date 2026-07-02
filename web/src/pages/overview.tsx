@@ -1,6 +1,6 @@
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, CreditCard, Chrome, Mail, Globe, Key } from 'lucide-react'
+import { RefreshCw, CreditCard, Chrome, Mail, Globe, Key, ShieldCheck, UserPlus } from 'lucide-react'
 
 const RESOURCE_CONFIG = [
   { key: 'cards', label: '支付卡', icon: CreditCard, color: 'text-violet-600' },
@@ -8,6 +8,8 @@ const RESOURCE_CONFIG = [
   { key: 'mailcom', label: 'Mail.com', icon: Mail, color: 'text-emerald-600' },
   { key: 'proxies', label: '代理 IP', icon: Globe, color: 'text-orange-600' },
   { key: 'codex', label: 'Codex', icon: Key, color: 'text-rose-600' },
+  { key: 'registered', label: 'Claude官Key', icon: ShieldCheck, color: 'text-sky-600' },
+  { key: 'openai', label: 'OpenAI官Key', icon: UserPlus, color: 'text-amber-600' },
 ]
 
 interface Props {
@@ -45,10 +47,10 @@ export default function Overview({ stats, onRefresh }: Props) {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-semibold tabular-nums">
-                    {s.available ?? s.active ?? 0}
+                    {s.unexported != null ? s.unexported : (s.available ?? s.active ?? 0)}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    可用 / 共 {s.total ?? 0}
+                    {s.unexported != null ? '未导出' : '可用'} / 共 {s.total ?? 0}
                     {s.allocated > 0 && <span className="ml-2">· {s.allocated} 已分配</span>}
                   </p>
                   <div className="mt-3 h-1.5 rounded-full bg-secondary overflow-hidden">
