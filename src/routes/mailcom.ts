@@ -25,7 +25,7 @@ router.post('/import', (req: Request, res: Response) => {
   const { accounts = [] } = req.body;
 
   const stmt = db.prepare(`
-    INSERT OR REPLACE INTO mailcom_accounts (id, email, password, tokenStatus, tokenAt, tokenError, banned, mailBannedAt, mailPaidAt, accessToken, refreshToken, sessionExpiresAt, addedAt)
+    INSERT OR IGNORE INTO mailcom_accounts (id, email, password, tokenStatus, tokenAt, tokenError, banned, mailBannedAt, mailPaidAt, accessToken, refreshToken, sessionExpiresAt, addedAt)
     VALUES (@id, @email, @password, @tokenStatus, @tokenAt, @tokenError, @banned, @mailBannedAt, @mailPaidAt, @accessToken, @refreshToken, @sessionExpiresAt, @addedAt)
   `);
 
@@ -103,7 +103,7 @@ router.post('/text-import', (req: Request, res: Response) => {
   }
 
   const stmt = db.prepare(`
-    INSERT OR REPLACE INTO mailcom_accounts (id, email, password, tokenStatus, tokenAt, tokenError, banned, mailBannedAt, mailPaidAt, accessToken, refreshToken, sessionExpiresAt, addedAt)
+    INSERT OR IGNORE INTO mailcom_accounts (id, email, password, tokenStatus, tokenAt, tokenError, banned, mailBannedAt, mailPaidAt, accessToken, refreshToken, sessionExpiresAt, addedAt)
     VALUES (@id, @email, @password, @tokenStatus, @tokenAt, @tokenError, @banned, @mailBannedAt, @mailPaidAt, @accessToken, @refreshToken, @sessionExpiresAt, @addedAt)
   `);
 
